@@ -25,7 +25,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 
-from models.rotated_junction_2d import Rotated2D
+from orbfilter.rotated_2d import Rotated2D
 from scan_Lz_theta_example import Lz, transmitted_Lz_envelope
 
 mpl.rcParams.update({

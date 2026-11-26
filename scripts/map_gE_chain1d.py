@@ -26,7 +26,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 
-from models.orbital_chain_1d import OrbitalChain1D, STATES, Lz, Q_ops, chi_z
+from orbfilter.chain_1d import OrbitalChain1D, STATES, Lz, Q_ops, chi_z
 
 
 # ----------------------------------------------------------------------

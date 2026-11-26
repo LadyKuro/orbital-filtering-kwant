@@ -21,7 +21,7 @@ rewritten. Requires: numpy, matplotlib, kwant.
 import numpy as np
 import matplotlib.pyplot as plt
 import kwant
-from models.rotated_junction_2d import Rotated2D
+from orbfilter.rotated_2d import Rotated2D
 
 # --- the orbital operator, paper Eq. (2), basis {pz, py, px} -----------
 Lz = np.array([[0, 0, 0],

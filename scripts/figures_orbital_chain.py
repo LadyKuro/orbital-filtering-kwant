@@ -27,7 +27,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from joblib import Parallel, delayed
-from models.orbital_chain_1d import OrbitalChain1D, transmitted_state, STATES, Lz, Q_ops
+from orbfilter.chain_1d import OrbitalChain1D, transmitted_state, STATES, Lz, Q_ops
 
 # ---- Tol bright palette / revtex-ish style ---------------------------
 plt.rcParams.update({"font.family": "STIXGeneral", "mathtext.fontset": "stix",
