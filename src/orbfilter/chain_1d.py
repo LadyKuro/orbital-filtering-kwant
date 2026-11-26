@@ -1,5 +1,5 @@
 """
-Phase-1 model for the Bekker project: 1D three-orbital chain with
+1D three-orbital chain (Sec. II of the paper) with
 mirror-symmetry-breaking orbital coupling g0 * chi, in one or two segments.
 
 Physics summary (chi = chi_z case):
@@ -9,12 +9,12 @@ Physics summary (chi = chi_z case):
       sigma_z = Lx^2 - Ly^2              (diagonal quadrupole)
   close a pseudospin algebra, and the coupling g0*chi_z makes the orbital
   character precess around the sigma_x axis with spatial rate
-      dphi/dx = k_minus - k_plus,   cos(k_pm a) = (E - eps -/+ g0) / (2 t).
+      dphi/dx = k_minus - k_plus,   cos(k_pm a) = (eps +/- g0 - E) / (2 t).
   A second segment with -g0 reverses the precession -> dipole/quadrupole
   reconversion. Full dipole->quadrupole conversion after one segment of
   length d requires (k_- - k_+) d = pi/2 + n pi.
 
-Basis: {pz, py, px} (paper Eq. (1)). Leads are orbital-isotropic (t * I),
+Basis: {pz, py, px}. Leads are orbital-isotropic (t * I),
 so all orbital superpositions are degenerate incoming states and <L>, <Q>
 are constant in the leads (no lead precession).
 
@@ -59,7 +59,7 @@ STATES = {
     "py":  ket(0, 1, 0),
     "px":  ket(0, 0, 1),
     "+z":  ket(0, 1, +1j),     # (|py> + i|px>)/sqrt2 : Lz = +1
-    "-z":  ket(0, 1, -1j),     # Lz = -1    
+    "-z":  ket(0, 1, -1j),     # Lz = -1
     "+x":  ket(-1j, 1, 0),     # (-i|pz> + |py>)/sqrt2 : Lx = +1
     "+y":  ket(-1j, 0, 1),     # (-i|pz> + |px>)/sqrt2 : Ly = +1
 }

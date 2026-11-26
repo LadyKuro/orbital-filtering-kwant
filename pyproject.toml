@@ -5,7 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orbfilter"
 version = "0.1.0"
-dependencies = ["numpy", "kwant", "scipy", "matplotlib"]
+description = "Kwant models for orbital angular momentum filtering in 1D chains and rotated 2D junctions"
+requires-python = ">=3.10"
+dependencies = ["numpy", "scipy", "matplotlib", "joblib", "kwant"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -16,6 +16,8 @@ transient (evanescent contributions absent from the propagating-mode sum).
 Requires the orbfilter package.
 """
 
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 from orbfilter.rotated_2d import Rotated2D, Lz
@@ -87,12 +89,13 @@ def plot_Lz_scan(angles, local_max, env_max, energy, width,
 
 
 # =======================================================================
-#  Example run (matches your earlier parameters)
+#  Example run
 # =======================================================================
 if __name__ == "__main__":
+    os.makedirs("figures/supplementary", exist_ok=True)
     params = dict(
         onsite_energy=0.0,
-        Vpi=-0.3,          # <-- your values here
+        Vpi=-0.3,
         Vsigma=1.0,
         L=400,
         L_central=300,
@@ -110,7 +113,7 @@ if __name__ == "__main__":
 
     plot_Lz_scan(angles, local_max, env_max,
                  energy=energy, width=params["width"],
-                 save_path=f"plots/Lz_scan_w{params['width']}_e{energy}.png")
+                 save_path=f"figures/supplementary/Lz_scan_w{params['width']}_e{energy}.png")
     plt.show()
 
     # --- optional single-angle diagnostic: overlay the analytic

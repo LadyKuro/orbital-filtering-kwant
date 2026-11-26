@@ -1,19 +1,16 @@
 """
-figures_orbital_chain.py
-========================
-Loop drivers + figure overlays built ON TOP OF your existing code
-(OrbitalChain1D, transmitted_state, pixel, map_g_energy, ballistic_Lz,
-plot_map, STATES, Lz, Q_ops, chi_z).  Nothing here re-implements the
-scattering; it only loops your `transmitted_state` and overlays the
-analytic reference.
+Figs. 2 and 3: two-segment 1D chain (Sec. II).
 
-Assumed already in scope (from your module) -- import or paste them:
-    OrbitalChain1D, transmitted_state, STATES, Lz, Q_ops
-    ballistic_Lz, plot_map            (optional, for the maps)
-    Parallel, delayed                 (joblib)
+  Fig. 2  <Lz>_out vs E for several g2/g1 ratios, inputs |p_y> and |+z>,
+          Kwant scattering with the analytic (ballistic) overlay.
+  Fig. 3  <Lz>_out over the (g2/g1, E) plane at fixed g1 (Kwant).
 
-`params` is a dict with keys t, eps, d1, d2 (as used by ballistic_Lz),
-e.g.  params = dict(t=1.0, eps=0.0, d1=60, d2=60).
+The scattering is done by orbfilter.chain_1d (OrbitalChain1D,
+transmitted_state); this script only loops over parameters and plots.
+`params` is a dict with keys t, eps, d1, d2,
+e.g.  params = dict(t=1.0, eps=0.0, d1=50, d2=50).
+
+Run from the repository root:  python scripts/fig2_fig3_chain_1d.py
 
 Sign convention of the analytic overlays (paper Eqs. (7)-(8)):
     |p_y> -> -sin(dphi)   |p_x> -> +sin(dphi)
@@ -32,7 +29,7 @@ plt.rcParams.update({"font.family": "STIXGeneral", "mathtext.fontset": "stix",
 C_Q, C_D = "#4477AA", "#EE6677"          # quadrupole / dipole families
 
 # ======================================================================
-#  thin wrapper: one (g1,g2,d1,d2,E,state) -> <Lz>   (reuses your code)
+#  thin wrapper: one (g1,g2,d1,d2,E,state) -> <Lz>
 # ======================================================================
 def lz_point(params, g1, g2, energy, phi_in, d1=None, d2=None):
     kw = dict(params)
@@ -40,13 +37,13 @@ def lz_point(params, g1, g2, energy, phi_in, d1=None, d2=None):
         kw["d1"] = d1
     if d2 is not None:
         kw["d2"] = d2
-    wire = OrbitalChain1D(g1=g1, g2=g2, **kw)         # noqa: F821
+    wire = OrbitalChain1D(g1=g1, g2=g2, **kw)
     wire.build()
-    phi_out, T = transmitted_state(wire, phi_in, energy)   # noqa: F821
+    phi_out, T = transmitted_state(wire, phi_in, energy)
     if phi_out is None or np.linalg.norm(phi_out) < 1e-12:
         return np.nan
     n2 = np.vdot(phi_out, phi_out).real
-    return np.vdot(phi_out, Lz @ phi_out).real / n2        # noqa: F821
+    return np.vdot(phi_out, Lz @ phi_out).real / n2
 
 
 # ----- analytic reference (exact-scattering signs) --------------------
@@ -80,15 +77,15 @@ def fig_lz_vs_E(params, g1, ratios, state="py", energies=None,
                 n_jobs=-1, overlay=True, save=None):
     """ratios: dict role -> g2/g1, with role in {echo, n0, n1, nm1, hom}
     (role sets the colour, matching the standalone figure).  Loops your
-    transmitted_state over E.  <Lz> uses your S-matrix readout; for |p_y>
-    that is a sine curve, for |+z> a cosine (same as the pasted panels)."""
+    transmitted_state over E.  <Lz> is the Kwant S-matrix readout; for |p_y>
+    that is a sine curve, for |+z> a cosine (cf. Fig. 2)."""
     if energies is None:
         rmax = max(abs(r) for r in ratios.values())
         Emax = 2 * params["t"] - g1 * rmax - 0.02
         energies = np.linspace(-Emax, Emax, 1200)
     else:
         Emax = energies.max()
-    phi = STATES[state]                                    # noqa: F821
+    phi = STATES[state]
 
     fig, ax = plt.subplots(figsize=(3.375, 2.5),
                            gridspec_kw=dict(left=0.145, right=0.975,
@@ -116,7 +113,7 @@ def fig_lz_vs_E(params, g1, ratios, state="py", energies=None,
     ttl = {"py": r"$\langle L_z\rangle = 0$", "px": r"$\langle L_z\rangle = 0$",
            "+z": r"$\langle L_z\rangle = 1$",
            "-z": r"$\langle L_z\rangle = -1$"}[state]
-    
+
     ax.set_title(rf"injected state with {ttl}", fontsize=9.2)
     ax.set_xlim(-Emax, Emax)
     ax.set_ylim(-1.16, 1.16)
@@ -148,7 +145,6 @@ def _ratio_label(role, r):
         return r"$g_2/g_1=-1$"
     if role == "hom":
         return r"$g_2/g_1=+1$"
-    n = {"n0": 1, "n1": 1, "nm1": -1}.get(role, "")
     return rf"$g_2/g_1={r:.2f}$"
 
 
@@ -157,8 +153,8 @@ def _ratio_label(role, r):
 #  (2) Kwant <Lz>(g2/g1, E) map, used by fig_maps_ratio_E(engine='kwant')
 # ======================================================================
 def map_g2_energy(params, g1, ratios, energies, state, n_jobs=-1):
-    """<Lz>(g2/g1, E): loops your transmitted_state (g1 fixed, g2 varied)."""
-    phi = STATES[state]                                     # noqa: F821
+    """<Lz>(g2/g1, E) from transmitted_state (g1 fixed, g2 varied)."""
+    phi = STATES[state]
     grid = [(r, e) for e in energies for r in ratios]
     res = Parallel(n_jobs=n_jobs, verbose=5)(
         delayed(lz_point)(params, g1, r * g1, e, phi) for r, e in grid)
@@ -308,13 +304,15 @@ def fig_maps_ratio_E(params, g1, r=None, energies=None, d1=None, d2=None,
 
 
 # ======================================================================
-#  Example driver (uncomment once your module's names are in scope)
+#  Driver: produces Figs. 2 and 3
 # ======================================================================
 if __name__ == "__main__":
+    import os
+    os.makedirs("figures", exist_ok=True)
     params = dict(t=1.0, eps=0.0, d1=50, d2=50)
 
     # length-aware stripe ratios (recomputed for whatever d1, d2 you set)
-    print("equal lengths d1=d2=60:", flanking_stripe_ratios(params, 0.5))
+    print("equal lengths d1=d2=50:", flanking_stripe_ratios(params, 0.5))
     print("unequal d1=70,d2=50:  ",
           flanking_stripe_ratios(params, 0.5, d1=70, d2=50))
 
@@ -323,11 +321,11 @@ if __name__ == "__main__":
     ratios_py = {"echo": rr["echo"], #"n0": rr["n0"],
                  "nm1": rr["nm1"], "hom": 1.0}
     fig_lz_vs_E(params, 0.5, ratios_py, state="py",
-                save="kwant_fig_lz_vs_E_py.png")
+                save="figures/fig2_lz_vs_E_py.png")
     fig_lz_vs_E(params, 0.5, ratios_py, state="+z",
-                save="kwant_fig_lz_vs_E_pz.png")
+                save="figures/fig2_lz_vs_E_pz.png")
     print("ratios finished")
     print("starting kwant")
     fig_maps_ratio_E(params, 0.5,
-                     engine="kwant", save="kwant_fig_maps_ratio_E.png")
+                     engine="kwant", save="figures/fig3_maps_ratio_E.png")
     print("done")

@@ -30,7 +30,7 @@ WIDTHS = [2, 3, 4, 5, 6, 10, 15, 20, 50, 100]      # Fig. 7 panels
 
 BASE_PARAMS = dict(
     onsite_energy=0.0,
-    Vpi=-0.3,          # <-- your values
+    Vpi=-0.3,
     Vsigma=1.0,
     L=440,             # 2*20 buffer + 400 central
     L_central=400,
@@ -41,10 +41,10 @@ BASE_PARAMS = dict(
 )
 
 THETAS = np.linspace(0.0, np.pi / 2, 401)
-ENERGIES = np.linspace(-1.5, 1.5, 401)   # adjust to your bandwidth
+ENERGIES = np.linspace(-1.5, 1.5, 401)
 
 DATA_DIR = "data"
-PLOT_DIR = "plots"
+PLOT_DIR = "figures/fig7_panels"     # one diagnostic map per width
 N_JOBS = -1
 
 

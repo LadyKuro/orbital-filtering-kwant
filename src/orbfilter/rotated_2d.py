@@ -138,7 +138,7 @@ class Rotated2D:
         for i in range(i_min, i_max + 1):
             for j in range(j_min, j_max + 1):
                 x, y = self.rot(i, j)
-                if (self.x_min-0.5*a <= x < self.x_max-0.5*a 
+                if (self.x_min-0.5*a <= x < self.x_max-0.5*a
                     and self.y_min-0.5*a <= y < self.y_max - 0.5*a):
                     site = lat_rot(i, j)
                     syst[site] = self.t0()
@@ -150,7 +150,7 @@ class Rotated2D:
 
 
         return rotated_sites
-    
+
     def add_interface_coupling(self, syst, lat, rotated_sites):
         a = self.a
 
@@ -181,7 +181,7 @@ class Rotated2D:
         # Build left and right interfaces
         build_interface(x_sq=a*(self.L1 - 1), x_rot=self.L1*a)
         build_interface(x_sq=a*(self.L1 + self.L2), x_rot=(self.L1 + self.L2)*a)
-    
+
 
     def attach_leads(self, syst, lat):
         """Attach left and right square leads."""
@@ -250,11 +250,11 @@ class Rotated2D:
     def _get_modes(self, energy, lead):
         wf = kwant.wave_function(self.syst, energy)
         psi = wf(lead)
-        norb = 3  # adjust if your model changes later
+        norb = self.norb
         n_sites = len(list(self.syst.sites))
         modes = psi.reshape(-1, n_sites, norb)
         return modes
-    
+
 
     # -------------------------------------------------------------
     #  Spectrum open and closed
@@ -298,7 +298,7 @@ class Rotated2D:
         syst[kwant.builder.HoppingKind((0, 1), lat_rot, lat_rot)] = self.t2(self.theta)
 
         return syst.finalized()
-    
+
     def middle_spectrum(self):
         syst_mid = self.build_middle_finite()
         H = syst_mid.hamiltonian_submatrix(sparse=False)
@@ -329,7 +329,7 @@ class Rotated2D:
 
         With summed_over_modes=True, numerators and norms are summed
         over modes *before* dividing, i.e. the polarization of an
-        equal mixture of all incoming modes (cf. Fig. 3e of the paper).
+        equal mixture of all incoming modes.
         """
 
         # --- extract site positions ---
@@ -392,7 +392,7 @@ class Rotated2D:
             # binned probability density (summed over sites in bin)
             wfs_binned = norm_bins.copy()
             return bin_centers, O_total, wfs_binned
-        
+
         return bin_centers, O_total
 
     def transmitted_Lz_envelope(self, energy=0.0, operator=Lz):
@@ -442,4 +442,3 @@ class Rotated2D:
             for m in range(n + 1, n_out):
                 env += 2.0 * np.abs(rho[m, n] * M[n, m])
         return env / N
-    

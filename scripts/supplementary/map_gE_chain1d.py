@@ -22,6 +22,8 @@ reflections in (g, E).
 Requires the orbfilter package.
 """
 
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -47,6 +49,7 @@ def plot_map(gs, energies, Z, title, cmap="RdBu_r", vmin=-1, vmax=1,
 
 
 if __name__ == "__main__":
+    os.makedirs("figures/supplementary", exist_ok=True)
     params = dict(t=1.0, eps=0.0, d1=60, d2=60, chi=chi_z, a=1.0)
     gs = np.linspace(0.0, 0.8, 81)
     energies = np.linspace(-1.6, 1.6, 121)   # inside the lead band (-2t, 2t)
@@ -56,15 +59,15 @@ if __name__ == "__main__":
     plot_map(gs, energies, Lz_h,
              r"homogeneous $g_1=g_2=g$: transmitted $\langle L_z\rangle$, "
              r"input $|{+}z\rangle$",
-             save_path="plots/map_gE_homogeneous_Lz.png")
+             save_path="figures/supplementary/map_gE_homogeneous_Lz.png")
     b_Lz = ballistic_Lz(params, gs, energies)
     plot_map(gs, energies, b_Lz,
              "ballistic prediction $\\cos\\Delta\\phi_{tot}$ (no reflections)",
-             save_path="plots/map_gE_ballistic.png")
+             save_path="figures/supplementary/map_gE_ballistic.png")
     plot_map(gs, energies, Lz_h - b_Lz,
              "kwant - ballistic prediction ",
-             save_path="plots/comparison.png")
-    
+             save_path="figures/supplementary/map_gE_comparison.png")
+
 
 
     plt.show()

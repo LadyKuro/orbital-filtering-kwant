@@ -93,7 +93,7 @@ def draw_lattice_schematic(
 
     # --- interface hoppings: same algorithm as add_interface_coupling ---
     def draw_interface(sq_sites_all, x_sq, x_rot, bond_reach=None):
-        # mirror of your Kwant code
+        # same rule as Rotated2D.add_interface_coupling
         sq_sites = [s for s in sq_sites_all
                     if np.isclose(s[0], x_sq)]
         rot_sites = [s for s in central_sites
@@ -202,7 +202,7 @@ def draw_lattice_schematic(
     ax.set_ylim(y_dim, y_top + 0.6 * a)
 
     # --- legend ---
-    
+
     '''
     handles = [
         plt.Line2D([0],[0], color=c_lead,  lw=1.6,    label='Lead hoppings'),

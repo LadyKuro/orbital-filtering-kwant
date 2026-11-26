@@ -20,6 +20,8 @@ Requires the orbfilter package. Failed pixels are stored as NaN (not 0),
 so they cannot be mistaken for zero polarization.
 """
 
+import os
+
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -140,7 +142,7 @@ def plot_Lz_phase_diagram(energies, thetas, Lz_map, params,
     pcm = ax.pcolormesh(energies, thetas / np.pi, pd.astype(float),
                         cmap="inferno", shading="auto",
                         vmin=0.0, vmax=max(np.nanmax(Lz_map), 1e-12))
-    
+
     cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
     cbar.set_label(r"$L_z^{\max}$", fontsize=15)
 
@@ -158,12 +160,12 @@ def plot_Lz_phase_diagram(energies, thetas, Lz_map, params,
     return fig, ax
 
 # =======================================================================
-# Example run
+# Fig. 6: W = 4, L_central = 400
 # =======================================================================
 if __name__ == "__main__":
     params = dict(
         onsite_energy=0.0,
-        Vpi=-0.3,          # <-- your values
+        Vpi=-0.3,
         Vsigma=1.0,
         L=440,             # 2*20 buffer + 400 central
         L_central=400,
@@ -174,10 +176,11 @@ if __name__ == "__main__":
         theta=0.0,
     )
 
-    # start coarse (~30 min-scale grids come later)
     thetas = np.linspace(0.0, np.pi / 2, 401)
-    energies = np.linspace(-1.5, 1.5, 401)   # adjust to your bandwidth
+    energies = np.linspace(-1.5, 1.5, 401)
 
+    os.makedirs("data", exist_ok=True)
+    os.makedirs("figures", exist_ok=True)
     Lz_map = map_Lz_energy_theta(params, energies, thetas, n_jobs=-1)
 
     np.savez(f"data/Lz_map_w{params['width']}_L{params['L_central']}.npz",
@@ -186,5 +189,5 @@ if __name__ == "__main__":
              params=np.array(str(params)))
 
     plot_Lz_map(energies, thetas, Lz_map, params,
-                save_path=f"plots/Lz_map_w{params['width']}.png")
+                save_path=f"figures/fig6_Lz_map_w{params['width']}.png")
     plt.show()

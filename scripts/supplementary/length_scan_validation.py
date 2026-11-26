@@ -22,6 +22,8 @@ validity section) -- these are separable diagnostics.
 Requires the orbfilter package.
 """
 
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
@@ -126,12 +128,13 @@ def figure_for_energy(params, ds, gs, energy, save_prefix=None):
 
 
 if __name__ == "__main__":
+    os.makedirs("figures/supplementary", exist_ok=True)
     params = dict(t=1.0, eps=0.0, chi=chi_z, a=1.0)
     ds = np.arange(4, 200, 2)          # total lengths (even, for d//2 split)
     gs = np.linspace(0.02, 0.7, 69)
 
     # representative energies: band center; generic; approaching band edge
     for E in (0.0, 0.7, 1.5):
-        figure_for_energy(params, ds, gs, E, save_prefix="plots/dscan")
+        figure_for_energy(params, ds, gs, E, save_prefix="figures/supplementary/dscan")
 
     plt.show()
