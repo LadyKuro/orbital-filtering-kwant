@@ -2,15 +2,18 @@ name: orbital
 channels:
   - conda-forge
 dependencies:
+  # versions used to produce the figures in the paper
   - python=3.11
-  - numpy
-  - jupyter
-  - scipy
-  - matplotlib
   - kwant=1.5.0
-  - python-mumps
+  - python-mumps=0.0.4      # MUMPS solver for Kwant (much faster scattering)
+  - numpy=2.4
+  - scipy=1.17
+  - matplotlib=3.11
+  - joblib=1.6
+  # tools
+  - pytest
+  - jupyter
   - ipykernel
-  - joblib
   - pip
   - pip:
       - -e .
