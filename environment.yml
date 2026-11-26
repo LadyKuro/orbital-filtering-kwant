@@ -7,7 +7,8 @@ dependencies:
   - jupyter
   - scipy
   - matplotlib
-  - kwant
+  - kwant=1.5.0
+  - python-mumps
   - ipykernel
   - joblib
   - pip
