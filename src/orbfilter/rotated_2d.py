@@ -25,7 +25,7 @@ class Rotated2D:
         # precompute regions
         self.L1 = L // 2 - L_central // 2
         self.L2 = L_central
-        self.L3 = L // 2 - L_central // 2
+        self.L3 = L - self.L1 - self.L2
 
         # rotation matrix
         self.R = np.array([
@@ -79,7 +79,7 @@ class Rotated2D:
         t[1,1] = v1*c*c + v2*s*s
         t[2,2] = v1*s*s + v2*c*c
 
-        t_xy = (v1 - v2) * c * s
+        t_xy = (v2 - v1) * c * s     # (Vsigma - Vpi) cos(phi) sin(phi), as in t1/t2 and Eq. (10)
         t[1, 2] = t_xy
         t[2, 1] = t_xy
 
