@@ -19,15 +19,14 @@ sit at d_n = (pi/2 + n pi)/Dk. Positions test the phase formula; any
 amplitude reduction tests the equal-transmission assumption (appendix,
 validity section) -- these are separable diagnostics.
 
-Requires orbital_chain_1d.py and map_gE_chain1d.py.
+Requires the orbfilter package.
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 
-from orbfilter.chain_1d import OrbitalChain1D, STATES, Lz, chi_z
-from map_gE_chain1d import transmitted_state
+from orbfilter.chain_1d import OrbitalChain1D, STATES, Lz, chi_z, transmitted_state
 
 
 # ----------------------------------------------------------------------

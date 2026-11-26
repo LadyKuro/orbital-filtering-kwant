@@ -16,8 +16,8 @@ theta-independent VERTICAL lines:
 - if at some (theta, E) *either* all py or all px channels are closed,
   L_z^max = 0 identically (nothing for Lz to couple).
 
-Assumes: Rotated2D class (corrected version), transmitted_Lz_envelope
-from scan_Lz_theta_example.py (with the nuc = wf.shape[0]//norb fix).
+Requires the orbfilter package. Failed pixels are stored as NaN (not 0),
+so they cannot be mistaken for zero polarization.
 """
 
 import numpy as np
@@ -26,7 +26,6 @@ import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 
 from orbfilter.rotated_2d import Rotated2D
-from scan_Lz_theta_example import Lz, transmitted_Lz_envelope
 
 mpl.rcParams.update({
     "font.family": "STIXGeneral",
@@ -70,10 +69,11 @@ def _one_pixel(params, theta, energy):
     wire = Rotated2D(**dict(params, theta=theta))
     wire.build()
     try:
-        return transmitted_Lz_envelope(wire, energy=energy)
+        return wire.transmitted_Lz_envelope(energy=energy)
     except Exception:
-        # e.g. no propagating modes at this energy -> no transmission
-        return 0.0
+        # A closed lead already gives 0.0 inside transmitted_Lz_envelope;
+        # anything raised here is a real failure -> NaN, reported below.
+        return np.nan
 
 
 def map_Lz_energy_theta(params, energies, thetas, n_jobs=-1, verbose=5):
@@ -85,7 +85,12 @@ def map_Lz_energy_theta(params, energies, thetas, n_jobs=-1, verbose=5):
     grid = [(th, en) for th in thetas for en in energies]
     vals = Parallel(n_jobs=n_jobs, verbose=verbose)(
         delayed(_one_pixel)(params, th, en) for th, en in grid)
-    return np.array(vals).reshape(len(thetas), len(energies))
+    Lz_map = np.array(vals, dtype=float).reshape(len(thetas), len(energies))
+    n_bad = int(np.isnan(Lz_map).sum())
+    if n_bad:
+        print(f"WARNING: {n_bad} of {Lz_map.size} pixels failed (stored as NaN), "
+              f"W = {params['width']}")
+    return Lz_map
 
 
 # =======================================================================
@@ -97,7 +102,7 @@ def plot_Lz_map(energies, thetas, Lz_map, params,
 
     pcm = ax.pcolormesh(energies, thetas / np.pi, Lz_map,
                         cmap="magma_r", shading="auto",
-                        vmin=0.0, vmax=max(Lz_map.max(), 1e-12))
+                        vmin=0.0, vmax=max(np.nanmax(Lz_map), 1e-12))
     cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
     cbar.set_label(r"$L_z^{\max}$", fontsize=17)
     cbar.ax.tick_params(labelsize=16)
@@ -134,7 +139,7 @@ def plot_Lz_phase_diagram(energies, thetas, Lz_map, params,
 
     pcm = ax.pcolormesh(energies, thetas / np.pi, pd.astype(float),
                         cmap="inferno", shading="auto",
-                        vmin=0.0, vmax=max(Lz_map.max(), 1e-12))
+                        vmin=0.0, vmax=max(np.nanmax(Lz_map), 1e-12))
     
     cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
     cbar.set_label(r"$L_z^{\max}$", fontsize=15)

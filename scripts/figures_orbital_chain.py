@@ -15,38 +15,21 @@ Assumed already in scope (from your module) -- import or paste them:
 `params` is a dict with keys t, eps, d1, d2 (as used by ballistic_Lz),
 e.g.  params = dict(t=1.0, eps=0.0, d1=60, d2=60).
 
-Exact-scattering sign convention (verified against an independent
-transfer-matrix solver):
-    |p_y> -> +sin(dphi)   |p_x> -> -sin(dphi)
+Sign convention of the analytic overlays (paper Eqs. (7)-(8)):
+    |p_y> -> -sin(dphi)   |p_x> -> +sin(dphi)
     |+z>  -> +cos(dphi)   |-z>  -> -cos(dphi)
-The analytic overlays below use these signs so they sit on top of the
-Kwant curves.
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from joblib import Parallel, delayed
-from orbfilter.chain_1d import OrbitalChain1D, transmitted_state, STATES, Lz, Q_ops
+from orbfilter.chain_1d import OrbitalChain1D, transmitted_state, STATES, Lz
 
 # ---- Tol bright palette / revtex-ish style ---------------------------
 plt.rcParams.update({"font.family": "STIXGeneral", "mathtext.fontset": "stix",
                      "font.size": 8, "axes.linewidth": 0.6})
 C_Q, C_D = "#4477AA", "#EE6677"          # quadrupole / dipole families
-
-def ket(*amps):
-    v = np.array(amps, dtype=complex)
-    return v / np.linalg.norm(v)
-
-STATES = {
-    "pz":  ket(1, 0, 0),
-    "py":  ket(0, 1, 0),
-    "px":  ket(0, 0, 1),
-    "+z":  ket(0, 1, +1j),     # (|py> + i|px>)/sqrt2 : Lz = +1
-    "-z":  ket(0, 1, -1j),     # Lz = -1    
-    "+x":  ket(-1j, 1, 0),     # (-i|pz> + |py>)/sqrt2 : Lx = +1
-    "+y":  ket(-1j, 0, 1),     # (-i|pz> + |px>)/sqrt2 : Ly = +1
-}
 
 # ======================================================================
 #  thin wrapper: one (g1,g2,d1,d2,E,state) -> <Lz>   (reuses your code)
@@ -171,77 +154,7 @@ def _ratio_label(role, r):
 
 
 # ======================================================================
-#  (2) <Lz> vs coupling imbalance delta = g1 + g2 at fixed E
-# ======================================================================
-def fig_lz_vs_imbalance(params, g1, E0=0.0, dmax=0.16, npts=201,
-                        states=("py", "px", "+z", "-z"),
-                        n_jobs=-1, overlay=True, save=None):
-    delta = np.linspace(-dmax, dmax, npts)
-    style = {"py": (C_Q, "-"), "px": (C_Q, "--"),
-             "+z": (C_D, "-"), "-z": (C_D, "--")}
-    fig, ax = plt.subplots(figsize=(3.375, 2.4), constrained_layout=True)
-    for st in states:
-        col, ls = style[st]
-        lz = Parallel(n_jobs=n_jobs)(
-            delayed(lz_point)(params, g1, dl - g1, E0, STATES[st])  # noqa
-            for dl in delta)
-        ax.plot(delta, lz, ls, color=col, lw=1.2,
-                label=rf"$|{ {'py':'p_y','px':'p_x','+z':'{+}z','-z':'{-}z'}[st] }\rangle$")
-        if overlay:
-            la = [analytic_lz(params, g1, dl - g1, E0, st) for dl in delta]
-            ax.plot(delta, la, ":", color=col, lw=0.7, alpha=0.7)
-    ax.axvline(0, color="#999", lw=0.6, ls="--")
-    for yv in (-1, 0, 1):
-        ax.axhline(yv, color="#CCC", lw=0.5, ls=":")
-    ax.set_xlabel(r"$\delta = g_1+g_2$")
-    ax.set_ylabel(r"$\langle L_z\rangle_{\rm out}$")
-    ax.set_ylim(-1.18, 1.18)
-    ax.set_title(rf"$g_1={g1},\ E={E0}$", fontsize=8)
-    ax.legend(fontsize=6.4, frameon=True, framealpha=1.0, facecolor="white",
-              edgecolor="none", ncol=2)
-    if save:
-        fig.savefig(save, dpi=300); fig.savefig(save.replace(".png", ".pdf"))
-    return fig, ax
-
-
-# ======================================================================
-#  (3) <Lz> vs length difference Dd = d1 - d2 at fixed couplings
-# ======================================================================
-def fig_lz_vs_lengthdiff(params, g1=0.5, g2=-0.5, L=120, E0=0.0, ddmax=20,
-                         states=("py", "px", "+z", "-z"),
-                         n_jobs=-1, overlay=True, save=None):
-    dd = np.arange(-ddmax, ddmax + 1)
-    dd = dd[(dd % 2) == (L % 2)]                 # integer sites, parity of L
-    style = {"py": (C_Q, "-"), "px": (C_Q, "--"),
-             "+z": (C_D, "-"), "-z": (C_D, "--")}
-    fig, ax = plt.subplots(figsize=(3.375, 2.4), constrained_layout=True)
-    for st in states:
-        col, ls = style[st]
-        lz = Parallel(n_jobs=n_jobs)(
-            delayed(lz_point)(params, g1, g2, E0, STATES[st],       # noqa
-                              d1=(L + x) // 2, d2=(L - x) // 2) for x in dd)
-        ax.plot(dd, lz, ls, color=col, lw=1.2, marker="o", ms=2,
-                label=rf"$|{ {'py':'p_y','px':'p_x','+z':'{+}z','-z':'{-}z'}[st] }\rangle$")
-        if overlay:
-            la = [analytic_lz(params, g1, g2, E0, st,
-                              d1=(L + x) // 2, d2=(L - x) // 2) for x in dd]
-            ax.plot(dd, la, ":", color=col, lw=0.7, alpha=0.7)
-    ax.axvline(0, color="#999", lw=0.6, ls="--")
-    for yv in (-1, 0, 1):
-        ax.axhline(yv, color="#CCC", lw=0.5, ls=":")
-    ax.set_xlabel(r"$\Delta d = d_1 - d_2$ (sites)")
-    ax.set_ylabel(r"$\langle L_z\rangle_{\rm out}$")
-    ax.set_ylim(-1.18, 1.18)
-    ax.set_title(rf"$g_1={g1},\ g_2={g2},\ L={L},\ E={E0}$", fontsize=7.5)
-    ax.legend(fontsize=6.4, frameon=True, framealpha=1.0, facecolor="white",
-              edgecolor="none", ncol=2)
-    if save:
-        fig.savefig(save, dpi=300); fig.savefig(save.replace(".png", ".pdf"))
-    return fig, ax
-
-
-# ======================================================================
-#  (4) (g2/g1, E) map with analytic conversion-loci overlay
+#  (2) Kwant <Lz>(g2/g1, E) map, used by fig_maps_ratio_E(engine='kwant')
 # ======================================================================
 def map_g2_energy(params, g1, ratios, energies, state, n_jobs=-1):
     """<Lz>(g2/g1, E): loops your transmitted_state (g1 fixed, g2 varied)."""
@@ -250,35 +163,6 @@ def map_g2_energy(params, g1, ratios, energies, state, n_jobs=-1):
     res = Parallel(n_jobs=n_jobs, verbose=5)(
         delayed(lz_point)(params, g1, r * g1, e, phi) for r, e in grid)
     return np.array(res).reshape(len(energies), len(ratios))
-
-
-def fig_map_with_overlay(params, g1, ratios, energies, state="py",
-                         n_jobs=-1, save=None):
-    from matplotlib.colors import Normalize
-    Z = map_g2_energy(params, g1, ratios, energies, state, n_jobs)
-    R, E = np.meshgrid(ratios, energies)
-    # analytic dphi field for the conversion-loci contours
-    DPHI = np.vectorize(lambda r, e: _dphi(params, g1, r * g1, e))(R, E)
-
-    fig, ax = plt.subplots(figsize=(3.375, 2.6), constrained_layout=True)
-    cmap = plt.get_cmap("RdBu_r").copy(); cmap.set_bad("#DDDDDD")
-    im = ax.pcolormesh(ratios, energies, Z, cmap=cmap,
-                       norm=Normalize(-1, 1), shading="auto", rasterized=True)
-    lo, hi = np.nanmin(DPHI), np.nanmax(DPHI)
-    levels = [np.pi/2 + n*np.pi
-              for n in range(int(np.floor((lo-np.pi/2)/np.pi)),
-                             int(np.ceil((hi-np.pi/2)/np.pi))+1)]
-    ax.contour(R, E, DPHI, levels=levels, colors="k", linewidths=0.35,
-               alpha=0.5)
-    ax.axvline(-1, color="k", lw=0.8, ls=(0, (4, 2)))
-    ax.set_xlabel(r"$g_2/g_1$"); ax.set_ylabel(r"$E/t$")
-    ax.set_title(rf"injected $|{ {'py':'p_y','+z':'{+}z'}[state] }\rangle$",
-                 fontsize=8)
-    cb = fig.colorbar(im, ax=ax, pad=0.02, ticks=[-1, 0, 1])
-    cb.set_label(r"$\langle L_z\rangle_{\rm out}$")
-    if save:
-        fig.savefig(save, dpi=300); fig.savefig(save.replace(".png", ".pdf"))
-    return fig, ax, Z
 
 
 # ======================================================================
@@ -333,7 +217,7 @@ def flanking_stripe_ratios(params, g1, d1=None, d2=None, E0=None):
 #  Two-panel (g2/g1, E) maps, |py> and |+z|, styled + length-aware
 # ======================================================================
 def fig_maps_ratio_E(params, g1, r=None, energies=None, d1=None, d2=None,
-                     engine="analytic", py_sign=+1, mask=True,
+                     engine="analytic", py_sign=-1, mask=True,
                      n_jobs=-1, save=None):
     """Transmitted <Lz> over (g2/g1, E) for |py> (top) and |+z> (bottom).
 
@@ -342,9 +226,8 @@ def fig_maps_ratio_E(params, g1, r=None, energies=None, d1=None, d2=None,
     conversion-loci contours and the two-channel mask are recomputed for
     those lengths, so the stripes move correctly when d1 != d2.
 
-    py_sign=+1 uses the exact-scattering sign (|py> -> +sin dphi), matching
-    the Kwant readout in this module; set py_sign=-1 for the older -sin
-    convention.  The dashed vertical marks g2/g1 = -1; when d1 != d2 the
+    py_sign=-1 gives <Lz> = -sin(dphi) for |py>, as in Eq. (7); it only
+    affects engine='analytic'.  The dashed vertical marks g2/g1 = -1; when d1 != d2 the
     true zero-<Lz> locus is drawn as a solid black line instead.
     """
     t, eps = params["t"], params["eps"]

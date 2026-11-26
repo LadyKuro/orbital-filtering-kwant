@@ -13,73 +13,12 @@ Where the curves agree the local peak is representative of the asymptotic
 precession; where local_max exceeds env_max the excess is an interface
 transient (evanescent contributions absent from the propagating-mode sum).
 
-Assumes the Rotated2D class with the corrected SK matrices, the
-query_ball_point interface, and compute_operator_binned as previously
-rewritten. Requires: numpy, matplotlib, kwant.
+Requires the orbfilter package.
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
-import kwant
-from orbfilter.rotated_2d import Rotated2D
-
-# --- the orbital operator, paper Eq. (2), basis {pz, py, px} -----------
-Lz = np.array([[0, 0, 0],
-               [0, 0, -1j],
-               [0, 1j, 0]])
-
-
-# =======================================================================
-#  Analytic envelope from the S-matrix (closed form, no x-scan needed)
-# =======================================================================
-def transmitted_Lz_envelope(wire, energy=0.0, operator=Lz):
-    """
-    L_z^max = (2/N) * sum_p |rho_{yp,xp}|  for the unpolarized equal-flux
-    mixture of incoming left-lead modes, where rho = t t^dagger is the
-    transmitted coherence matrix and the sum runs over pairs of outgoing
-    right-lead modes (n, m) coupled by the operator (py <-> px, same
-    transverse channel p -- automatically selected by the matrix element).
-
-    Implementation note: rather than classifying modes by orbital/channel
-    by hand, we use the operator matrix elements M_nm = <u_n|Lz|u_m>
-    between outgoing modes. Pairs not coupled by Lz (different transverse
-    channel, or involving pz) have M_nm = 0 by the orthogonality argument
-    of the derivation, so the generic sum
-
-        L_env = (2/N) * sum_{n<m} |rho_mn| * |M_nm| / sqrt(N_nn N_mm)
-
-    reduces to the appendix formula without manual bookkeeping, and stays
-    correct if the lead is ever modified (e.g. onsite disorder in tests).
-    Returns 0.0 if the right lead carries no propagating modes.
-    """
-    sm = kwant.smatrix(wire.syst, energy)
-    t = sm.submatrix(1, 0)                        # (n_out_R, n_in_L)
-    n_out = t.shape[0]
-    if n_out == 0:
-        return 0.0
-
-    modes = sm.lead_info[1]
-    wf = modes.wave_functions[:, n_out:]          # outgoing modes only
-    nuc = wf.shape[0] // wire.norb
-    u = wf.T.reshape(n_out, nuc, wire.norb)       # (n, sites_uc, norb)
-
-    rho = t @ t.conj().T                          # transmitted coherences
-    M = np.einsum('nsi,ij,msj->nm', u.conj(), operator, u)
-    G = np.einsum('nsi,msi->nm', u.conj(), u)     # mode overlaps (diag ~ norms)
-
-    N = np.real(np.sum(np.diag(rho) * np.diag(G)))
-    if N <= 1e-14:
-        return 0.0
-
-    # envelope: sum of |coherence * matrix element| over distinct pairs;
-    # factor 2 because (n,m) and (m,n) are the conjugate halves of the
-    # same sinusoid (cf. 2 Im[...] in the derivation)
-    env = 0.0
-    for n in range(n_out):
-        for m in range(n + 1, n_out):
-            env += 2.0 * np.abs(rho[m, n] * M[n, m])
-    return env / N
-
+from orbfilter.rotated_2d import Rotated2D, Lz
 
 # =======================================================================
 #  Local binned maximum in region III (as before, index-safe version)
@@ -113,7 +52,7 @@ def scan_Lz_vs_theta(params, angles, energy=0.5, bin_coeff=1.0,
         local_max[k] = local_Lz_max(wire, energy=energy,
                                     bin_coeff=bin_coeff,
                                     buffer_cells=buffer_cells)
-        env_max[k] = transmitted_Lz_envelope(wire, energy=energy)
+        env_max[k] = wire.transmitted_Lz_envelope(energy=energy)
 
         if verbose and (k % 10 == 0 or k == len(angles) - 1):
             print(f"[{k+1:3d}/{len(angles)}] theta = {theta:.4f}  "
@@ -181,6 +120,6 @@ if __name__ == "__main__":
     #     operator=Lz, energy=energy, lead=0, summed_over_modes=True)
     # plt.plot(bin_x, Otot[0], lw=0.8)
     # plt.axvline(wire.a * (wire.L1 + wire.L2), color='k', ls='--', lw=0.8)
-    # plt.axhline(transmitted_Lz_envelope(wire, energy), color='teal', ls=':')
-    # plt.axhline(-transmitted_Lz_envelope(wire, energy), color='teal', ls=':')
+    # plt.axhline(wire.transmitted_Lz_envelope(energy), color='teal', ls=':')
+    # plt.axhline(-wire.transmitted_Lz_envelope(energy), color='teal', ls=':')
     # plt.xlabel('x'); plt.ylabel(r'$\langle L_z\rangle(x)$'); plt.show()

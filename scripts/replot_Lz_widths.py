@@ -61,7 +61,7 @@ def replot_width(width, L_central=L_CENTRAL):
         save_path=os.path.join(PLOT_DIR, f"Lz_map_w{width}.png"),
     )
     plt.close(fig)
-    print(f"[W={width:2d}] re-plotted, max Lz = {Lz_map.max():.4f}")
+    print(f"[W={width:2d}] re-plotted, max Lz = {np.nanmax(Lz_map):.4f}")
     return thetas, energies, Lz_map, params
 
 

@@ -25,7 +25,7 @@ from map_Lz_energy_theta import map_Lz_energy_theta, plot_Lz_map
 # =======================================================================
 # Configuration
 # =======================================================================
-WIDTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+WIDTHS = [2, 3, 4, 5, 6, 10, 15, 20, 50, 100]      # Fig. 7 panels
 
 BASE_PARAMS = dict(
     onsite_energy=0.0,
@@ -57,7 +57,7 @@ def run_width(width):
     Lz_map = map_Lz_energy_theta(params, ENERGIES, THETAS, n_jobs=N_JOBS)
     dt = time.time() - t0
     print(f"[W={width:2d}] done in {dt/60:.1f} min, "
-          f"max Lz = {Lz_map.max():.4f}")
+          f"max Lz = {np.nanmax(Lz_map):.4f}")
 
     # per-width file (safe against crashes mid-batch)
     np.savez_compressed(
