@@ -4,12 +4,13 @@ series of lead widths W. For every width the full 2D scan is run and the
 result is stored in a single compressed archive (plus one .npz per width,
 so a crashed run does not lose finished maps).
 
-Axis convention matches map_Lz_energy_theta.py:
+Axis convention matches fig6_map_Lz.py:
     Lz_map shape = (len(thetas), len(energies))
     -> rows = angle, columns = energy,
        ready for pcolormesh(energies, thetas, Lz_map).
 
-Run:  python batch_Lz_widths.py
+Run from the repository root:  python scripts/fig7_compute_widths.py
+Then plot with:               python scripts/fig7_plot_widths.py
 """
 
 import os
@@ -20,7 +21,7 @@ import matplotlib
 matplotlib.use("Agg")            # headless-safe (server / tmux runs)
 import matplotlib.pyplot as plt
 
-from map_Lz_energy_theta import map_Lz_energy_theta, plot_Lz_map
+from fig6_map_Lz import map_Lz_energy_theta, plot_Lz_map
 
 # =======================================================================
 # Configuration
