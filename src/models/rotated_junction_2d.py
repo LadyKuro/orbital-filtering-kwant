@@ -41,9 +41,6 @@ class Rotated2D:
 
         self.syst = None
 
-        self.binning = 1.0  # default binning coefficient
-        self.energy = 0.0  # default energy for calculations
-
 
     # ============================================================
     #  Hopping matrices
@@ -97,8 +94,6 @@ class Rotated2D:
     def rot(self, i, j):
         return self.R @ np.array([i, j])
 
-    def inv_rot(self, x, y):
-        return self.R.T @ np.array([x, y])
 
 
     # ============================================================
@@ -216,44 +211,11 @@ class Rotated2D:
         self.attach_leads(syst, lat)
 
         return syst.finalized()
-    
-    def build_system_1D(self):
-        syst = kwant.Builder()
-        lat = kwant.lattice.chain(norbs=3)
-        #Add sites
-        for x in range(self.L):
-            syst[lat(x)] = self.t0()
-        #Add hoppings
-        for x in range(self.L1):
-            syst[lat(x), lat(x + 1)] = self.t1(0)
-        for x in range(self.L1, self.L1 + self.L2):
-            syst[lat(x), lat(x + 1)] = self.t1(self.theta)
-        for x in range(self.L1 + self.L2, self.L-1):
-            syst[lat(x), lat(x + 1)] = self.t1(0)
-        #Attach leads
-        # Left lead (periodic unit cell defined at origin)
-        sym_left = kwant.TranslationalSymmetry((-self.a, ))
-        lead_left = kwant.Builder(sym_left)
-        lead_left[lat(0)] = self.t0()
-        lead_left[lat(0), lat(1)] = self.t1(0)
-        syst.attach_lead(lead_left)
-
-        # Right lead: define the lead unit cell at origin and let Kwant
-        # attach it to the system boundary automatically.
-        sym_right = kwant.TranslationalSymmetry((self.a, ))
-        lead_right = kwant.Builder(sym_right)
-        lead_right[lat(0)] = self.t0()
-        lead_right[lat(0), lat(1)] = self.t1(0)
-        syst.attach_lead(lead_right)
-        return syst.finalized()
-    
-    # ============================================================
 
     def build(self):
-        if self.width > 1:
-            self.syst = self.build_system_2D()
-        else:
-            self.syst = self.build_system_1D()
+        if self.width < 2:
+            raise ValueError("Rotated2D requires width >= 2 (a truly 2D junction).")
+        self.syst = self.build_system_2D()
         return self.syst
 
     def plot(self, path=None):
@@ -275,50 +237,6 @@ class Rotated2D:
         modes = psi.reshape(-1, n_sites, norb)
         return modes
     
-    def get_lead_modes(self, energy=0.0, lead=0):
-        """
-        Return propagating modes of a given lead at specified energy.
-
-        Returns
-        -------
-        modes : dict with keys
-            'wavefunctions' : array, shape (n_modes, n_sites, norb)
-            'velocities'    : array, shape (n_modes,)
-            'momenta'       : array, shape (n_modes,)
-            'directions'    : list of 'in' / 'out'
-        """
-        if self.syst is None:
-            raise RuntimeError("System not built. Call build() first.")
-
-        lead_sys = self.syst.leads[lead]
-
-        # Compute modes
-        prop_modes, _ = lead_sys.modes(energy)
-
-        wf = prop_modes.wave_functions      # (norb * n_sites_uc, n_modes)
-        velocities = prop_modes.velocities
-        momenta = prop_modes.momenta
-
-        norb = self.norb
-
-        # number of sites in the lead unit cell
-        n_sites_uc = len(lead_sys.sites)
-
-        # reshape wavefunctions
-        wf = wf.T.reshape(-1, n_sites_uc, norb)
-
-        # classify directions
-        directions = [
-            "in" if v > 0 else "out"
-            for v in velocities
-        ]
-
-        return {
-            "wavefunctions": wf,
-            "velocities": velocities,
-            "momenta": momenta,
-            "directions": directions,
-        }
 
     # -------------------------------------------------------------
     #  Spectrum open and closed
@@ -369,27 +287,6 @@ class Rotated2D:
         evals = np.linalg.eigvalsh(H)
         return evals
 
-    def build_middle_infinite(self):
-        a = self.a
-        lat = kwant.lattice.square(a, norbs=3)
-
-        sym = kwant.TranslationalSymmetry((a, 0))
-        syst = kwant.Builder(sym)
-
-        for y in range(self.width):
-            syst[lat(0, y)] = self.t0()
-
-        syst[kwant.builder.HoppingKind((1, 0), lat, lat)] = self.t1(self.theta)
-        syst[kwant.builder.HoppingKind((0, 1), lat, lat)] = self.t2(self.theta)
-
-        return syst.finalized()
-    
-    def middle_bands(self, k_vals):
-        syst_inf = self.build_middle_infinite()
-        bands = kwant.physics.Bands(syst_inf)
-
-        energies = np.array([bands(k) for k in k_vals])
-        return energies
 
     # -------------------------------------------------------------
     #  Spatially resolved ⟨O(x)⟩ using binned averaging
@@ -416,9 +313,6 @@ class Rotated2D:
         over modes *before* dividing, i.e. the polarization of an
         equal mixture of all incoming modes (cf. Fig. 3e of the paper).
         """
-                
-        self.binning = binning_coeff
-        self.energy = energy
 
         # --- extract site positions ---
         sites = list(self.syst.sites)
@@ -482,295 +376,6 @@ class Rotated2D:
             return bin_centers, O_total, wfs_binned
         
         return bin_centers, O_total
-
-    # -------------------------------------------------------------
-    # Optional: plotting helper
-    # -------------------------------------------------------------
-    def plot_operator_binned(self, bin_centers, O_total, operator_name="O", path = None):
-        import matplotlib.pyplot as plt
-
-        n_modes = O_total.shape[0]
-        fig, axes = plt.subplots(n_modes, 1, figsize=(5, 2*n_modes), sharex=True)
-        if n_modes == 1:
-            axes = [axes]
-
-        for m, ax in enumerate(axes):
-            ax.plot(bin_centers, O_total[m], label=f"{operator_name} (mode {m})")
-            ax.axvline(self.L1 * self.a, color="k", ls="--")
-            ax.axvline((self.L1 + self.L2) * self.a, color="k", ls="--")
-            ax.legend()
-            ax.set_ylabel(f"⟨{operator_name}⟩")
-
-        axes[-1].set_xlabel("x")
-        fig.suptitle(f"Spatially resolved ⟨{operator_name}⟩ at " 
-                     f"E={self.energy}, width = {self.width}, binning={self.binning}")
-        plt.tight_layout()
-        if path is not None:
-            plt.savefig(path, dpi=600)
-        plt.show()
-
-    def plot_operator_summed(self, bin_centers, O_total, operator_name="O", path = None):
-        n_modes = O_total.shape[0]
-        O_sum = O_total.sum(axis=0)
-        plt.figure(figsize=(6,4))
-        plt.plot(bin_centers, O_sum, label=f"Sum over modes")
-        plt.axvline(self.L1 * self.a, color="k", ls="--")
-        plt.axvline((self.L1 + self.L2) * self.a, color="k", ls="--")
-        plt.legend()
-        plt.xlabel("x")
-        plt.ylabel(f"Sum of ⟨{operator_name}⟩")
-        plt.title(f"Spatially resolved sum of ⟨{operator_name}⟩ at "
-                    f"E={self.energy}, width = {self.width}, binning={self.binning}")
-        plt.tight_layout()
-        if path is not None:
-            plt.savefig(path, dpi=600)
-        plt.show()
-    
-
-    def _orbital_current_bonds(self, psi, Lmat, direction="x"):
-        results = []
-
-        sites = list(self.syst.sites)
-        norb = psi.shape[1]
-
-        # get sparse Hamiltonian
-        H = self.syst.hamiltonian_submatrix(sparse=True).tocsr()
-
-        # iterate over nonzero off-diagonal blocks
-        for i in range(len(sites)):
-            for j in H[i*norb:(i+1)*norb].nonzero()[1] // norb:
-                if j <= i:
-                    continue
-
-                s1 = sites[i]
-                s2 = sites[j]
-
-                r1 = np.array(s1.pos)
-                r2 = np.array(s2.pos)
-                d = r2 - r1
-
-                if direction == "x" and d[0] <= 0:
-                    continue
-                if direction == "y" and d[1] <= 0:
-                    continue
-
-                psi1 = psi[i]
-                psi2 = psi[j]
-
-                A = psi1.conj() @ (Lmat) @ psi2
-                J = 1j * (A - A.conj())
-
-                x_mid = 0.5 * (r1[0] + r2[0])
-                results.append((x_mid, J.real))
-
-        return results
-
-    
-    def compute_orbital_current_binned(
-            self,
-            Lmat,
-            energy=0,
-            lead=0,
-            binning_coeff=1.0,
-            direction="x",
-            summed_over_modes=False):
-        """
-        Compute spatially resolved orbital current ⟨J_L⟩(x)
-        """
-        self.binning = binning_coeff
-        self.energy = energy
-
-        # --- site positions (for binning scale) ---
-        sites = list(self.syst.sites)
-        x_sites = np.array([s.pos[0] for s in sites])
-        x_min, x_max = x_sites.min(), x_sites.max()
-
-        default_bins = max(1, int((x_max - x_min + 1)))
-        n_bins = max(1, int(default_bins * binning_coeff))
-
-        edges = np.linspace(x_min, x_max, n_bins + 1)
-        bin_centers = 0.5 * (edges[:-1] + edges[1:])
-
-        # --- get modes ---
-        modes = self._get_modes(energy, lead)
-        n_modes = modes.shape[0]
-
-        J_total = np.zeros((n_modes, n_bins))
-
-        # --- loop over modes ---
-        for m in range(n_modes):
-            bond_currents = self._orbital_current_bonds(
-                modes[m], Lmat, direction=direction
-            )
-
-            for x_mid, J in bond_currents:
-                b = np.digitize(x_mid, edges) - 1
-                if 0 <= b < n_bins:
-                    J_total[m, b] += J
-
-        # remove zero-current modes
-        keep = [i for i in range(n_modes) if np.abs(J_total[i]).sum() > 1e-14]
-        J_total = J_total[keep]
-
-        if summed_over_modes:
-            J_total = J_total.sum(axis=0).reshape(1, -1)/len(keep)
-
-        print("Orbital current shape:", J_total.shape)
-        return bin_centers, J_total
-
-    
-    def binned_wavefunction(self, energy=0, lead=0, binning_coeff=1.0):
-        modes = self._get_modes(energy, lead)
-        return self.compute_operator_binned(
-            operator=np.eye(self.norb),  # identity gives local density
-            energy=energy,
-            lead = lead,
-            binning_coeff=binning_coeff,
-            summed_over_modes=False,
-            normed=False
-        )
-    
-    def plot_operator_and_modes(self, bins, operator, wfs, lead_modes, name="Lz"):
-        n_modes = wfs.shape[0]
-        lm = lead_modes['wavefunctions']
-        lm[np.abs(lm) < 1e-10] = 0.0
-        weights = np.sum(np.abs(lm)**2, axis=1)
-        weights_norm = weights / weights.sum(axis=1, keepdims=True)
-        total_density = np.sum(wfs, axis = 0)/wfs.shape[0]
-        total_op = np.sum(operator, axis = 0)/operator.shape[0]
-
-        labels = ["$p_x$", "$p_y$", "$p_z$"]
-        x = np.arange(3)
-        fig, axes = plt.subplots(n_modes+1, 3, figsize=(8, 2*(n_modes)))
-        for m in range(n_modes):
-            axes[m][0].plot(bins, operator[m], label=f"{name} (mode {m})", color="navy")
-            axes[m][0].axvline(self.L1, color='grey', linestyle='--', linewidth=1)
-            axes[m][0].axvline(self.L1+self.L2, color='grey', linestyle='--', linewidth=1)
-            axes[m][1].plot(bins, wfs[m], label=f"Mode {m} density", color = "darkred")
-            axes[m][1].axvline(self.L1, color='grey', linestyle='--', linewidth=1)
-            axes[m][1].axvline(self.L1+self.L2, color='grey', linestyle='--', linewidth=1)
-            axes[m][2].bar(x, weights_norm[m])
-            axes[m][2].set_xticks(x)
-            axes[m][2].set_xticklabels(labels)
-            axes[m][2].set_ylim(0, 1)
-            axes[m][2].set_ylabel(f"Mode {m}")
-            axes[m][0].legend()
-            axes[m][0].set_ylabel(f"{name}")
-            axes[m][1].legend()
-            axes[m][1].set_ylabel("Density")
-
-        axes[-1][0].plot(bins, total_op, label = f"Mean {name}")
-        axes[-1][1].plot(bins, total_density, label = "Mean state density")
-        axes[-1][0].set_xlabel("x")
-        axes[-1][1].set_xlabel("x")
-        axes[0][2].set_title("Orbital content of lead modes")
-        plt.tight_layout()
-        plt.show()
-
-    def max_Lz_right_lead(self, energy=0.0, operator=None,
-                           weight_by_transmission=True, threshold=1e-8,
-                           signed=True):
-        """
-        Orbital-moment expectation of the outgoing modes of the right
-        lead, reduced to a single scalar for use in a theta-scan.
-
-        Parameters
-        ----------
-        operator : (norb,norb) array, default self.Lz
-        weight_by_transmission : if True, only consider outgoing modes
-            that actually carry flux transmitted from the left lead at
-            this energy (i.e. mode n such that sum_m |S_{n,m}|^2 > threshold).
-            If False, returns the max over *all* propagating right-lead
-            modes regardless of whether they're populated -- an upper
-            bound independent of the injection.
-        signed : if True, return the signed value with largest |Lz|
-            (so you can see sign flips vs theta, cf. Fig. 2a/2c of the
-            paper). If False, return |Lz|.
-
-        Returns
-        -------
-        float
-        """
-        if operator is None:
-            operator = self.Lz
-        if self.syst is None:
-            raise RuntimeError("System not built. Call build() first.")
-
-        smatrix = kwant.smatrix(self.syst, energy)
-        modes_right = smatrix.lead_info[1]        # PropagatingModes, right lead,
-                                                    # already ordered to match submatrix()
-        wf = modes_right.wave_functions             # (norb*n_sites_uc, n_modes)
-        n_sites_uc = wf.shape[0] // self.norb
-        norb = self.norb
-        wf = wf.T.reshape(-1, n_sites_uc, norb)      # (n_modes, n_sites_uc, norb)
-
-        numer = np.einsum("nsi,ij,nsj->n", wf.conj(), operator, wf).real
-        norm = np.einsum("nsi,nsi->n", wf.conj(), wf).real
-        Lz_modes = numer / norm                      # (n_modes,)
-
-        if len(Lz_modes) == 0:
-            return 0.0
-
-        if weight_by_transmission:
-            t = smatrix.submatrix(1, 0)              # (n_out_right, n_in_left)
-            T_per_mode = np.sum(np.abs(t) ** 2, axis=1)
-            keep = T_per_mode > threshold
-            if not np.any(keep):
-                return 0.0
-            Lz_modes = Lz_modes[keep]
-
-        j = np.argmax(np.abs(Lz_modes))
-        return Lz_modes[j] if signed else abs(Lz_modes[j])
-    
-    def transmitted_Lz_amplitude(self, energy=0.0, operator=None, n_cells=500):
-        """
-        Far-field <Lz>(x) of the state transmitted into the right lead,
-        for an unpolarized (equal-flux) mixture of all incoming left-lead
-        modes, built from the S-matrix and outgoing-mode coherences.
-
-        Returns (max |<Lz>(x)|, (cell_index, Lz_x)).
-        """
-        if operator is None:
-            operator = self.Lz
-        sm = kwant.smatrix(self.syst, energy)
-        t = sm.submatrix(1, 0)                    # (n_out_R, n_in_L)
-        n_out = t.shape[0]
-        if n_out == 0:
-            return 0.0, (None, None)
-
-        modes = sm.lead_info[1]
-        # PropagatingModes: first half incoming, second half outgoing
-        wf = modes.wave_functions[:, n_out:]      # outgoing only
-        k = modes.momenta[n_out:]                  # Bloch phase e^{ik} per cell
-        nuc = wf.shape[0] // self.norb
-        u = wf.T.reshape(n_out, nuc, self.norb)
-
-        rho = t @ t.conj().T                       # transmitted coherence matrix
-        M = np.einsum('nsi,ij,msj->nm', u.conj(), operator, u)
-        N = np.einsum('nsi,msi->nm', u.conj(), u)
-
-        cells = np.arange(n_cells)
-        dk = k[None, :] - k[:, None]               # k_m - k_n
-        ph = np.exp(1j * dk[:, :, None] * cells)   # (n, m, x)
-
-        num = np.einsum('mn,nm,nmx->x', rho, M, ph).real
-        den = np.einsum('mn,nm,nmx->x', rho, N, ph).real
-        Lz_x = num / den
-        return np.max(np.abs(Lz_x)), (cells, Lz_x)
-    
-    def scan_max_Lz_vs_theta(self, thetas, energy=0.0, **kwargs):
-        """
-        Rebuild the system at each theta and evaluate max_Lz_right_lead.
-        Returns (thetas, values) as arrays.
-        """
-        values = np.empty(len(thetas))
-        for k, th in enumerate(thetas):
-            self.theta = th
-            self.R = np.array([[np.cos(th), -np.sin(th)],
-                                [np.sin(th),  np.cos(th)]])
-            self.build()
-            values[k] = self.transmitted_Lz_amplitude(energy=energy, **kwargs)
-        return np.asarray(thetas), values
 
     def transmitted_Lz_envelope(self, energy=0.0, operator=Lz):
         """
