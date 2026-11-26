@@ -36,6 +36,7 @@ BASE_PARAMS = dict(
     L_central=400,
     a=1.0,
     coupling=0.5,
+    interface_cutoff=1.2,   # r_c in units of a (None = nearest bond only)
     theta=0.0,
 )
 

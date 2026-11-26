@@ -99,6 +99,7 @@ if __name__ == "__main__":
         width=4,
         a=1.0,
         coupling=0.5,
+        interface_cutoff=1.2,   # r_c in units of a (None = nearest bond only)
         theta=0.0,         # overwritten in the scan
     )
     energy = 0.5

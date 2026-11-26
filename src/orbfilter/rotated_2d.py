@@ -9,7 +9,17 @@ Lz = np.array([[0, 0, 0],
 
 
 class Rotated2D:
-    def __init__(self, onsite_energy, Vpi, Vsigma, L, L_central, width, a, theta, coupling):
+    def __init__(self, onsite_energy, Vpi, Vsigma, L, L_central, width, a, theta, coupling,
+                 interface_cutoff=None):
+        """
+        interface_cutoff : float or None, in units of a.
+            None  -> each lead site at an interface is bonded to its single
+                     nearest site of the rotated lattice.
+            r_c   -> each lead site is bonded to every rotated site within
+                     distance r_c * a; if there is none, to its nearest one.
+            Every interface bond uses Eq. (11): coupling * (a/d)^2 * T(phi).
+            Use a <= r_c * a < sqrt(2) a to keep the theta = 0 limit exact.
+        """
         # store physical parameters
         self.width = width
         self.L = L
@@ -21,6 +31,7 @@ class Rotated2D:
         self.Vsigma = Vsigma
         self.norb = 3
         self.coupling = coupling
+        self.interface_cutoff = interface_cutoff
 
         # precompute regions
         self.L1 = L // 2 - L_central // 2
@@ -143,9 +154,13 @@ class Rotated2D:
     def add_interface_coupling(self, syst, lat, rotated_sites):
         a = self.a
 
+        r_c = self.interface_cutoff
+        # candidate rotated sites must reach at least r_c beyond the lead column
+        window = 2 * a if r_c is None else max(2 * a, (r_c + 1) * a)
+
         def build_interface(x_sq, x_rot):
             sq_sites = [s for s in syst.sites() if s.family == lat and np.isclose(s.pos[0], x_sq)]
-            rot_sites = [s for s in rotated_sites if abs(s.pos[0] - x_rot) < 2*a]
+            rot_sites = [s for s in rotated_sites if abs(s.pos[0] - x_rot) < window]
 
             if not rot_sites:
                 print(f"Warning: No interface rotated sites found at x_rot={x_rot}.")
@@ -153,12 +168,15 @@ class Rotated2D:
 
             tree = cKDTree([s.pos for s in rot_sites])
             for sq in sq_sites:
-                dist, idx = tree.query(sq.pos)
-                rot_site = rot_sites[idx]
-                dx, dy = (rot_site.pos - sq.pos) / a
-                phi = np.arctan2(dy, dx)
-                hop = self.t_direction(phi, dist)
-                syst[sq, rot_site] = hop
+                idxs = [] if r_c is None else tree.query_ball_point(sq.pos, r=r_c * a)
+                if not idxs:                      # no cutoff, or nothing within it
+                    idxs = [tree.query(sq.pos)[1]]
+                for idx in idxs:
+                    rot_site = rot_sites[idx]
+                    d = rot_site.pos - sq.pos
+                    dist = np.linalg.norm(d)
+                    phi = np.arctan2(d[1], d[0])
+                    syst[sq, rot_site] = self.t_direction(phi, dist)
 
         # Build left and right interfaces
         build_interface(x_sq=a*(self.L1 - 1), x_rot=self.L1*a)

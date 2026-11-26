@@ -3,8 +3,9 @@ Fig. 4: schematic of the 2D rotated-junction tight-binding model
 (square-lattice leads, central region rotated by theta, interface bonds).
 
 Pure matplotlib drawing; no Kwant computation.
-Moved unchanged from notebooks/visualisations.ipynb (cell 2); only the
-output path was changed (now figures/fig4_schematic.pdf).
+Moved from notebooks/visualisations.ipynb (cell 2). Changes: output path
+(figures/fig4_schematic.pdf), and interface bonds drawn with the model's
+rule (r_c = 1.2 a on both sides, fallback to the nearest site).
 
 Run from the repository root:  python scripts/fig4_schematic.py
 """
@@ -119,8 +120,8 @@ def draw_lattice_schematic(
                     #ls=(0, (4, 2.5)),   # dashed
                     alpha=0.9, zorder=2)
 
-    draw_interface(left_sites,  x_sq=a * (L1), x_rot=x_iface1, bond_reach=1.4*a)
-    draw_interface(right_sites, x_sq=a * (L1 + L2), x_rot=x_iface2, bond_reach=1.1*a)
+    draw_interface(left_sites,  x_sq=a * (L1), x_rot=x_iface1, bond_reach=1.2*a)
+    draw_interface(right_sites, x_sq=a * (L1 + L2), x_rot=x_iface2, bond_reach=1.2*a)
 
     # --- draw sites (on top of all bonds) ---
     for s in left_sites + right_sites:
