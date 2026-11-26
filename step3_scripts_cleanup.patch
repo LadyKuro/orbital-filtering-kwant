@@ -1,0 +1,1120 @@
+diff --git a/scripts/batch_Lz_widths.py b/scripts/batch_Lz_widths.py
+index 8c5a826..8bd21ec 100644
+--- a/scripts/batch_Lz_widths.py
++++ b/scripts/batch_Lz_widths.py
+@@ -25,7 +25,7 @@ from map_Lz_energy_theta import map_Lz_energy_theta, plot_Lz_map
+ # =======================================================================
+ # Configuration
+ # =======================================================================
+-WIDTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
++WIDTHS = [2, 3, 4, 5, 6, 10, 15, 20, 50, 100]      # Fig. 7 panels
+ 
+ BASE_PARAMS = dict(
+     onsite_energy=0.0,
+@@ -57,7 +57,7 @@ def run_width(width):
+     Lz_map = map_Lz_energy_theta(params, ENERGIES, THETAS, n_jobs=N_JOBS)
+     dt = time.time() - t0
+     print(f"[W={width:2d}] done in {dt/60:.1f} min, "
+-          f"max Lz = {Lz_map.max():.4f}")
++          f"max Lz = {np.nanmax(Lz_map):.4f}")
+ 
+     # per-width file (safe against crashes mid-batch)
+     np.savez_compressed(
+diff --git a/scripts/fig1_concept.py b/scripts/fig1_concept.py
+index 2821d60..a4ec5d9 100644
+--- a/scripts/fig1_concept.py
++++ b/scripts/fig1_concept.py
+@@ -3,8 +3,9 @@ Fig. 1 concept schematic: two-segment chain with g(x) = g1 (d1 sites), g2 (d2 si
+ (a) chain + coupling profile, quadrupole |p_y> injected.
+ (b) g2/g1 = -1  -> pseudospin echo, Delta phi = 0, <Lz> = 0      (no filtering)
+ (c) g2/g1 != -1 tuned so Delta phi = pi/2 -> <Lz> = +-1           (filtering)
+-Output: fig1_concept.pdf (PRB two-column width).
++Output: figures/fig1_concept.pdf (PRB single-column width).
+ """
++import os
+ import numpy as np
+ import matplotlib.pyplot as plt
+ from matplotlib.patches import Ellipse, Circle, Rectangle, FancyArrowPatch
+@@ -124,6 +125,7 @@ pseudospin_panel(axB, phi1, -phi1, "py", "(b)", r"$g_2=-g_1$",
+ pseudospin_panel(axC, phi1, -phi1 + np.pi / 2, "lz", "(c)", r"$g_2\neq-g_1$",
+                  r"$\langle L_z\rangle=\pm1$", "filtering")
+ 
+-#fig.savefig("fig1_concept.pdf")
+-#fig.savefig("fig1_concept.png", dpi=250)
++os.makedirs("figures", exist_ok=True)
++fig.savefig("figures/fig1_concept.pdf")
++fig.savefig("figures/fig1_concept.png", dpi=250)
+ plt.show()
+\ No newline at end of file
+diff --git a/scripts/fig2_lz_vs_E_ratios.py b/scripts/fig2_lz_vs_E_ratios.py
+deleted file mode 100644
+index 09cf51d..0000000
+--- a/scripts/fig2_lz_vs_E_ratios.py
++++ /dev/null
+@@ -1,115 +0,0 @@
+-"""
+-Fig. 2 panel: transmitted <Lz> vs energy for selected g2/g1 ratios.
+-Input state |py> (quadrupole), two segments d1 = d2 = d, ballistic
+-pseudospin readout  <Lz> = -sin(dphi),  dphi = d[dk(g1,E) + dk(g2,E)],
+-dk(g)a = arccos((eps-g-E)/2t) - arccos((eps+g-E)/2t).
+-
+-Ratios chosen from the stripe ladder at band center:
+-  r = -1                    echo line, <Lz> = 0 at every E (no filtering)
+-  r = (-g1+delta_0)/g1      n=0 conversion stripe, <Lz> ~ -1, flattest
+-  r = (-g1+delta_1)/g1      n=1 stripe, <Lz> ~ +1, dispersion ~3x larger
+-  r = +1                    homogeneous reference (rapid oscillation)
+-
+-Kwant overlay hook: if kwant_lz_vs_E.npz exists (arrays 'E' and one
+-'lz_r<label>' per ratio), points are drawn over the ballistic lines.
+-"""
+-
+-import os
+-import numpy as np
+-from scipy.optimize import brentq
+-import matplotlib as mpl
+-import matplotlib.pyplot as plt
+-
+-mpl.rcParams.update({
+-    "font.family": "STIXGeneral",
+-    "mathtext.fontset": "stix",
+-    "font.size": 8,
+-    "axes.linewidth": 0.6,
+-})
+-
+-# Tol bright
+-C = {"echo": "#000000", "n0": "#347AC1", "n1": "#A53D49", "hom": "#C4B339"}
+-
+-# ------------------------------------------------------------------ model
+-t, a, eps = 1.0, 1.0, 0.0
+-g1, d = 0.5, 60
+-
+-def dk(g, E):
+-    return (np.arccos(np.clip((eps - g - E) / (2 * t), -1, 1))
+-            - np.arccos(np.clip((eps + g - E) / (2 * t), -1, 1))) / a
+-
+-def dphi(g2, E):
+-    return d * (dk(g1, E) + dk(g2, E))
+-
+-# exact stripe positions at band center (dphi = pi/2 + n pi);
+-# n = 0 is the first stripe above the echo line (delta > 0, dphi = +pi/2),
+-# n = -1 the first below it (delta < 0, dphi = -pi/2).
+-def stripe(n, E0=eps):
+-    f = lambda g2: dphi(g2, E0) - (np.pi / 2 + n * np.pi)
+-    pred = np.pi / (d * ((1 / np.sqrt(1 - ((eps + g1 - E0) / 2 / t) ** 2)
+-                          + 1 / np.sqrt(1 - ((eps - g1 - E0) / 2 / t) ** 2))
+-                         / (2 * t * a)))
+-    if n >= 0:
+-        lo, hi = -g1 + n * 0.3 * pred, -g1 + (n + 2) * 1.5 * pred
+-    else:
+-        lo, hi = -g1 + (n - 1) * 1.5 * pred, -g1 + (n + 1) * 0.7 * pred
+-    return brentq(f, lo, hi)
+-
+-g2_n0 = stripe(0)
+-g2_nm1 = stripe(-1)
+-print(f"stripe g2 values: n=0 -> {g2_n0:.4f} (r={g2_n0/g1:.3f}), "
+-      f"n=-1 -> {g2_nm1:.4f} (r={g2_nm1/g1:.3f})")
+-
+-# propagating window for both channels in both segments (|E -/+ g| < 2t)
+-Emax = 2 * t - max(abs(g1), abs(g2_nm1), abs(g2_n0)) - 0.02
+-E = np.linspace(-Emax, Emax, 1200)
+-
+-curves = [
+-    ("echo", -g1,    r"$g_2/g_1=-1$",                  "-", 1.4),
+-#    ("n0",   g2_n0,  rf"$g_2/g_1={g2_n0/g1:.3f}$ ($n=1$)",    "-", 1.2),
+-    ("n1",   g2_nm1, rf"$g_2/g_1={g2_nm1/g1:.3f}$",  "-", 1.2),
+-    ("hom",  +g1,    r"$g_2/g_1=+1$ (uniform)",               "-", 1.0),
+-]
+-
+-print(g2_n0/g1)
+-print(g2_nm1/g1)
+-# ------------------------------------------------------------------ plot
+-fig, ax = plt.subplots(figsize=(3.375, 2.5),
+-                       gridspec_kw=dict(left=0.145, right=0.975,
+-                                        top=0.89, bottom=0.14))
+-
+-for key, g2, lab, ls, lw in curves:
+-    lz = np.cos(dphi(g2, E))
+-    ax.plot(E, lz, ls, color=C[key], lw=lw, label=lab,
+-            alpha=0.55 if key == "hom" else 1.0)
+-
+-# optional exact-scattering overlay
+-if os.path.exists("kwant_lz_vs_E.npz"):
+-    dat = np.load("kwant_lz_vs_E.npz")
+-    for key, g2, lab, ls, lw in curves:
+-        k = f"lz_r{key}"
+-        if k in dat:
+-            ax.plot(dat["E"][::20], dat[k][::20], "o", ms=2.2,
+-                    mfc="none", mew=0.6, color=C[key], zorder=5)
+-
+-for y in (-1, 0, 1):
+-    ax.axhline(y, color="#BBBBBB", lw=0.5, ls=":", zorder=0)
+-ax.axvline(eps, color="#BBBBBB", lw=0.5, ls="--", zorder=0)
+-ax.set_title(r"injected state $|p_y\rangle+i|p_x\rangle $", fontsize=8)
+-ax.set_xlim(-Emax, Emax)
+-ax.set_ylim(-1.18, 1.18)
+-ax.set_xlabel(r"$E/t$")
+-ax.set_ylabel(r"$\langle L_z\rangle_{\mathrm{out}}$")
+-ax.legend(loc="lower left", fontsize=6.3, frameon=True, framealpha=0.9,
+-          facecolor="white", edgecolor="none",
+-          borderaxespad=0.2, handlelength=1.6, labelspacing=0.25)
+-ax.annotate("no filtering", (0.62 * Emax, 1.03), fontsize=6.5,
+-            color="#444444", fontweight="bold")
+-ax.annotate("filtering", (-0.13 * Emax, 0.07), fontsize=6.5,
+-            color=C["n0"], fontweight="bold")
+-ax.tick_params(direction="in", top=True, right=True, length=2.5)
+-
+-
+-#fig.savefig("plots/fig2_lz_vs_E_ratios_cos.png", dpi=300)
+-fig.savefig("plots/fig2_lz_vs_E_ratios_cos.pdf")
+-print("done")
+\ No newline at end of file
+diff --git a/scripts/fig2_lz_vs_imbalance.py b/scripts/fig2_lz_vs_imbalance.py
+deleted file mode 100644
+index 3afc07d..0000000
+--- a/scripts/fig2_lz_vs_imbalance.py
++++ /dev/null
+@@ -1,91 +0,0 @@
+-"""
+-Fig. 2, panel 4: transmitted <Lz> vs coupling imbalance at fixed energy,
+-for the four input states (two quadrupole, two dipole).
+-
+-Fix g1 and E; sweep g2 through the imbalance delta = g1 + g2 (delta = 0 is
+-the antisymmetric echo point g2 = -g1). Ballistic pseudospin readouts:
+-    |py> : <Lz> = -sin(dphi)      |px> : <Lz> = +sin(dphi)
+-    |+z> : <Lz> = +cos(dphi)      |-z> : <Lz> = -cos(dphi)
+-with dphi = d[dk(g1,E) + dk(g2,E)],
+-     dk(g)a = arccos((eps-g-E)/2t) - arccos((eps+g-E)/2t).
+-
+-At the echo (delta = 0): quadrupoles cross zero (no Lz generated,
+-character preserved), dipoles are preserved at +/-1. Away from it the two
+-families sweep in quadrature -> imbalance is the filter/anti-filter knob.
+-
+-Kwant overlay hook: if kwant_lz_vs_delta.npz exists (array 'delta' plus
+-'lz_py','lz_px','lz_pz_p','lz_pz_m'), points are drawn over the lines.
+-"""
+-
+-import os
+-import numpy as np
+-import matplotlib as mpl
+-import matplotlib.pyplot as plt
+-
+-mpl.rcParams.update({
+-    "font.family": "STIXGeneral",
+-    "mathtext.fontset": "stix",
+-    "font.size": 8,
+-    "axes.linewidth": 0.6,
+-})
+-
+-# ------------------------------------------------------------------ model
+-t, a, eps = 1.0, 1.0, 0.0
+-g1, d, E0 = 0.5, 60, 0.0
+-delta_max = 0.16                     # imbalance window (a few fringes)
+-
+-def dk(g, E):
+-    return (np.arccos(np.clip((eps - g - E) / (2 * t), -1, 1))
+-            - np.arccos(np.clip((eps + g - E) / (2 * t), -1, 1))) / a
+-
+-delta = np.linspace(-delta_max, delta_max, 1000)
+-g2 = delta - g1                      # g2 = -g1 + delta
+-dphi = d * (dk(g1, E0) + dk(g2, E0))
+-
+-# ------------------------------------------------------------------ curves
+-C_Q = "#4477AA"   # quadrupole family (blue)
+-C_D = "#EE6677"   # dipole family (red)
+-
+-curves = [
+-    (r"$|p_y\rangle$", -np.sin(dphi), C_Q, "-",  1.3),
+-    (r"$|p_x\rangle$", +np.sin(dphi), C_Q, "--", 1.1),
+-    (r"$|{+}z\rangle$", +np.cos(dphi), C_D, "-",  1.3),
+-    (r"$|{-}z\rangle$", -np.cos(dphi), C_D, "--", 1.1),
+-]
+-
+-fig, ax = plt.subplots(figsize=(3.375, 2.4), constrained_layout=True)
+-
+-for lab, y, col, ls, lw in curves:
+-    ax.plot(delta, y, ls, color=col, lw=lw, label=lab)
+-
+-# optional exact-scattering overlay
+-if os.path.exists("kwant_lz_vs_delta.npz"):
+-    dat = np.load("kwant_lz_vs_delta.npz")
+-    keymap = {r"$|p_y\rangle$": "lz_py", r"$|p_x\rangle$": "lz_px",
+-              r"$|{+}z\rangle$": "lz_pz_p", r"$|{-}z\rangle$": "lz_pz_m"}
+-    for lab, y, col, ls, lw in curves:
+-        k = keymap[lab]
+-        if k in dat:
+-            ax.plot(dat["delta"][::15], dat[k][::15], "o", ms=2.2,
+-                    mfc="none", mew=0.6, color=col, zorder=5)
+-
+-for yv in (-1, 0, 1):
+-    ax.axhline(yv, color="#CCCCCC", lw=0.5, ls=":", zorder=0)
+-ax.axvline(0.0, color="#999999", lw=0.6, ls="--", zorder=0)
+-ax.annotate("echo\n($g_2=-g_1$)", (0.004, -0.30), fontsize=6.2,
+-            color="#555555", ha="left", va="center")
+-
+-ax.set_xlim(-delta_max, delta_max)
+-ax.set_ylim(-1.18, 1.18)
+-ax.set_xlabel(r"imbalance $\;\delta = g_1 + g_2$")
+-ax.set_ylabel(r"$\langle L_z\rangle_{\mathrm{out}}$")
+-ax.set_title(rf"$g_1={g1},\ E={E0}$", fontsize=8, pad=3)
+-ax.legend(loc="upper right", fontsize=6.6, frameon=True, framealpha=1.0,
+-          facecolor="white", edgecolor="none", ncol=2,
+-          columnspacing=1.0, handlelength=1.5, labelspacing=0.25)
+-ax.tick_params(direction="in", top=True, right=True, length=2.5)
+-
+-fig.savefig("/home/claude/fig2_lz_vs_imbalance.png", dpi=300)
+-fig.savefig("/home/claude/fig2_lz_vs_imbalance.pdf")
+-print("dphi(delta=0) =", d * (dk(g1, E0) + dk(-g1, E0)))
+-print("done")
+diff --git a/scripts/fig2_maps_ratio_E.py b/scripts/fig2_maps_ratio_E.py
+deleted file mode 100644
+index 8368e3b..0000000
+--- a/scripts/fig2_maps_ratio_E.py
++++ /dev/null
+@@ -1,113 +0,0 @@
+-"""
+-Fig. 2 maps: transmitted <Lz> over the (g2/g1, E) plane at fixed g1,
+-for a quadrupole input |py> and a dipole input |+z>.
+-
+-Ballistic pseudospin phase (two segments, d1 = d2 = d):
+-    dphi(g2,E) = d [ dk(g1,E) + dk(g2,E) ],
+-    dk(g)a = arccos((eps-g-E)/2t) - arccos((eps+g-E)/2t).
+-Readouts:  |py> -> <Lz> = -sin(dphi);   |+z> -> <Lz> = +cos(dphi).
+-
+-Both channels must propagate in both segments; the two-channel region is
+-|E| + max(|g1|,|g2|) < 2t. Outside it one mode is evanescent (polarizer
+-regime) and the ballistic cosine no longer applies -> masked (grey).
+-
+-Overlays:
+-  * echo line g2/g1 = -1 (dashed): quadrupole <Lz> = 0 at every E.
+-  * conversion loci dphi = pi/2 + n pi (thin solid): full conversion;
+-    they fan out from the echo line with |E| and refocus at band centre
+-    E = eps, the geometric statement of the stripe ladder.
+-
+-Kwant overlay: replace the analytic fields by loading exact-scattering
+-.npz maps of the same shape (see hook at the bottom).
+-"""
+-
+-import numpy as np
+-import matplotlib as mpl
+-import matplotlib.pyplot as plt
+-from matplotlib.colors import Normalize
+-
+-mpl.rcParams.update({
+-    "font.family": "STIXGeneral",
+-    "mathtext.fontset": "stix",
+-    "font.size": 8,
+-    "axes.linewidth": 0.6,
+-})
+-
+-# ------------------------------------------------------------------ model
+-t, a, eps = 1.0, 1.0, 0.0
+-g1, d = 0.5, 60
+-
+-r = np.linspace(-2.2, 1.4, 601)          # g2 / g1
+-g2 = r * g1
+-E = np.linspace(-1.8, 1.8, 601)
+-RR, EE = np.meshgrid(r, E)
+-G2 = RR * g1
+-
+-def dk(g, Egrid):
+-    return (np.arccos(np.clip((eps - g - Egrid) / (2 * t), -1, 1))
+-            - np.arccos(np.clip((eps + g - Egrid) / (2 * t), -1, 1))) / a
+-
+-DPHI = d * (dk(g1, EE) + dk(G2, EE))
+-
+-lz_py = -np.sin(DPHI)          # quadrupole input
+-lz_pz = np.cos(DPHI)           # dipole input
+-
+-# two-channel propagating mask (both segments, both channels)
+-gmax = np.maximum(np.abs(g1), np.abs(G2))
+-prop = (np.abs(EE) + gmax) < (2 * t - 1e-9)
+-lz_py = np.where(prop, lz_py, np.nan)
+-lz_pz = np.where(prop, lz_pz, np.nan)
+-DPHI_m = np.where(prop, DPHI, np.nan)
+-
+-# ------------------------------------------------------------------ plot
+-fig, axes = plt.subplots(2, 1, figsize=(3.375, 5.0), sharex=True,
+-                         constrained_layout=True)
+-cmap = plt.get_cmap("RdBu_r").copy()
+-cmap.set_bad("#DDDDDD")
+-norm = Normalize(-1, 1)
+-
+-panels = [
+-    (axes[0], lz_py, r"injected $|p_y\rangle$"),
+-    (axes[1], lz_pz, r"injected $|p_y\rangle + i |p_x\rangle$"),
+-]
+-
+-# conversion loci: dphi = pi/2 + n pi
+-lo = np.nanmin(DPHI_m); hi = np.nanmax(DPHI_m)
+-nmin = int(np.floor((lo - np.pi / 2) / np.pi))
+-nmax = int(np.ceil((hi - np.pi / 2) / np.pi))
+-levels = [(np.pi / 2 + n * np.pi) for n in range(nmin, nmax + 1)]
+-
+-for ax, field, title in panels:
+-    im = ax.pcolormesh(r, E, field, cmap=cmap, norm=norm, shading="auto",
+-                       rasterized=True)
+-    # echo line
+-    ax.axvline(-1.0, color="k", lw=0.8, ls=(0, (4, 2)))
+-    # conversion loci
+-    ax.contour(RR, EE, DPHI_m, levels=levels, colors="k",
+-               linewidths=0.4, alpha=0.55)
+-    ax.set_ylabel(r"$E/t$")
+-    ax.set_ylim(E.min(), E.max())
+-    ax.set_title(title, fontsize=8, pad=3)
+-    ax.tick_params(direction="in", top=True, right=True, length=2.5,
+-                   color="#888888")
+-
+-axes[1].set_xlabel(r"$g_2/g_1$")
+-axes[1].set_xlim(r.min(), r.max())
+-
+-cbar = fig.colorbar(im, ax=axes, location="right", shrink=0.9,
+-                    ticks=[-1, 0, 1], pad=0.02)
+-cbar.set_label(r"$\langle L_z\rangle_{\mathrm{out}}$")
+-cbar.ax.tick_params(length=2.5)
+-
+-fig.savefig("plots/fig2_maps_ratio_E.png", dpi=300)
+-fig.savefig("plots/fig2_maps_ratio_E.pdf")
+-print("dphi range:", lo, hi, " n:", nmin, nmax)
+-print("done")
+-
+-# ---- Kwant overlay hook -------------------------------------------------
+-# To use exact scattering instead of the ballistic cosine, save arrays of
+-# shape (len(E), len(r)) named 'lz_py' and 'lz_pz' (plus 'r','E') to
+-# kwant_maps_ratio_E.npz and swap:
+-#     dat = np.load("kwant_maps_ratio_E.npz")
+-#     lz_py, lz_pz = dat["lz_py"], dat["lz_pz"]
+-# keeping the same mask/overlay code.
+diff --git a/scripts/figures_orbital_chain.py b/scripts/figures_orbital_chain.py
+index bf11b79..f0376fa 100644
+--- a/scripts/figures_orbital_chain.py
++++ b/scripts/figures_orbital_chain.py
+@@ -15,39 +15,22 @@ Assumed already in scope (from your module) -- import or paste them:
+ `params` is a dict with keys t, eps, d1, d2 (as used by ballistic_Lz),
+ e.g.  params = dict(t=1.0, eps=0.0, d1=60, d2=60).
+ 
+-Exact-scattering sign convention (verified against an independent
+-transfer-matrix solver):
+-    |p_y> -> +sin(dphi)   |p_x> -> -sin(dphi)
++Sign convention of the analytic overlays (paper Eqs. (7)-(8)):
++    |p_y> -> -sin(dphi)   |p_x> -> +sin(dphi)
+     |+z>  -> +cos(dphi)   |-z>  -> -cos(dphi)
+-The analytic overlays below use these signs so they sit on top of the
+-Kwant curves.
+ """
+ 
+ import numpy as np
+ import matplotlib.pyplot as plt
+ from matplotlib.colors import Normalize
+ from joblib import Parallel, delayed
+-from orbfilter.chain_1d import OrbitalChain1D, transmitted_state, STATES, Lz, Q_ops
++from orbfilter.chain_1d import OrbitalChain1D, transmitted_state, STATES, Lz
+ 
+ # ---- Tol bright palette / revtex-ish style ---------------------------
+ plt.rcParams.update({"font.family": "STIXGeneral", "mathtext.fontset": "stix",
+                      "font.size": 8, "axes.linewidth": 0.6})
+ C_Q, C_D = "#4477AA", "#EE6677"          # quadrupole / dipole families
+ 
+-def ket(*amps):
+-    v = np.array(amps, dtype=complex)
+-    return v / np.linalg.norm(v)
+-
+-STATES = {
+-    "pz":  ket(1, 0, 0),
+-    "py":  ket(0, 1, 0),
+-    "px":  ket(0, 0, 1),
+-    "+z":  ket(0, 1, +1j),     # (|py> + i|px>)/sqrt2 : Lz = +1
+-    "-z":  ket(0, 1, -1j),     # Lz = -1    
+-    "+x":  ket(-1j, 1, 0),     # (-i|pz> + |py>)/sqrt2 : Lx = +1
+-    "+y":  ket(-1j, 0, 1),     # (-i|pz> + |px>)/sqrt2 : Ly = +1
+-}
+-
+ # ======================================================================
+ #  thin wrapper: one (g1,g2,d1,d2,E,state) -> <Lz>   (reuses your code)
+ # ======================================================================
+@@ -171,77 +154,7 @@ def _ratio_label(role, r):
+ 
+ 
+ # ======================================================================
+-#  (2) <Lz> vs coupling imbalance delta = g1 + g2 at fixed E
+-# ======================================================================
+-def fig_lz_vs_imbalance(params, g1, E0=0.0, dmax=0.16, npts=201,
+-                        states=("py", "px", "+z", "-z"),
+-                        n_jobs=-1, overlay=True, save=None):
+-    delta = np.linspace(-dmax, dmax, npts)
+-    style = {"py": (C_Q, "-"), "px": (C_Q, "--"),
+-             "+z": (C_D, "-"), "-z": (C_D, "--")}
+-    fig, ax = plt.subplots(figsize=(3.375, 2.4), constrained_layout=True)
+-    for st in states:
+-        col, ls = style[st]
+-        lz = Parallel(n_jobs=n_jobs)(
+-            delayed(lz_point)(params, g1, dl - g1, E0, STATES[st])  # noqa
+-            for dl in delta)
+-        ax.plot(delta, lz, ls, color=col, lw=1.2,
+-                label=rf"$|{ {'py':'p_y','px':'p_x','+z':'{+}z','-z':'{-}z'}[st] }\rangle$")
+-        if overlay:
+-            la = [analytic_lz(params, g1, dl - g1, E0, st) for dl in delta]
+-            ax.plot(delta, la, ":", color=col, lw=0.7, alpha=0.7)
+-    ax.axvline(0, color="#999", lw=0.6, ls="--")
+-    for yv in (-1, 0, 1):
+-        ax.axhline(yv, color="#CCC", lw=0.5, ls=":")
+-    ax.set_xlabel(r"$\delta = g_1+g_2$")
+-    ax.set_ylabel(r"$\langle L_z\rangle_{\rm out}$")
+-    ax.set_ylim(-1.18, 1.18)
+-    ax.set_title(rf"$g_1={g1},\ E={E0}$", fontsize=8)
+-    ax.legend(fontsize=6.4, frameon=True, framealpha=1.0, facecolor="white",
+-              edgecolor="none", ncol=2)
+-    if save:
+-        fig.savefig(save, dpi=300); fig.savefig(save.replace(".png", ".pdf"))
+-    return fig, ax
+-
+-
+-# ======================================================================
+-#  (3) <Lz> vs length difference Dd = d1 - d2 at fixed couplings
+-# ======================================================================
+-def fig_lz_vs_lengthdiff(params, g1=0.5, g2=-0.5, L=120, E0=0.0, ddmax=20,
+-                         states=("py", "px", "+z", "-z"),
+-                         n_jobs=-1, overlay=True, save=None):
+-    dd = np.arange(-ddmax, ddmax + 1)
+-    dd = dd[(dd % 2) == (L % 2)]                 # integer sites, parity of L
+-    style = {"py": (C_Q, "-"), "px": (C_Q, "--"),
+-             "+z": (C_D, "-"), "-z": (C_D, "--")}
+-    fig, ax = plt.subplots(figsize=(3.375, 2.4), constrained_layout=True)
+-    for st in states:
+-        col, ls = style[st]
+-        lz = Parallel(n_jobs=n_jobs)(
+-            delayed(lz_point)(params, g1, g2, E0, STATES[st],       # noqa
+-                              d1=(L + x) // 2, d2=(L - x) // 2) for x in dd)
+-        ax.plot(dd, lz, ls, color=col, lw=1.2, marker="o", ms=2,
+-                label=rf"$|{ {'py':'p_y','px':'p_x','+z':'{+}z','-z':'{-}z'}[st] }\rangle$")
+-        if overlay:
+-            la = [analytic_lz(params, g1, g2, E0, st,
+-                              d1=(L + x) // 2, d2=(L - x) // 2) for x in dd]
+-            ax.plot(dd, la, ":", color=col, lw=0.7, alpha=0.7)
+-    ax.axvline(0, color="#999", lw=0.6, ls="--")
+-    for yv in (-1, 0, 1):
+-        ax.axhline(yv, color="#CCC", lw=0.5, ls=":")
+-    ax.set_xlabel(r"$\Delta d = d_1 - d_2$ (sites)")
+-    ax.set_ylabel(r"$\langle L_z\rangle_{\rm out}$")
+-    ax.set_ylim(-1.18, 1.18)
+-    ax.set_title(rf"$g_1={g1},\ g_2={g2},\ L={L},\ E={E0}$", fontsize=7.5)
+-    ax.legend(fontsize=6.4, frameon=True, framealpha=1.0, facecolor="white",
+-              edgecolor="none", ncol=2)
+-    if save:
+-        fig.savefig(save, dpi=300); fig.savefig(save.replace(".png", ".pdf"))
+-    return fig, ax
+-
+-
+-# ======================================================================
+-#  (4) (g2/g1, E) map with analytic conversion-loci overlay
++#  (2) Kwant <Lz>(g2/g1, E) map, used by fig_maps_ratio_E(engine='kwant')
+ # ======================================================================
+ def map_g2_energy(params, g1, ratios, energies, state, n_jobs=-1):
+     """<Lz>(g2/g1, E): loops your transmitted_state (g1 fixed, g2 varied)."""
+@@ -252,35 +165,6 @@ def map_g2_energy(params, g1, ratios, energies, state, n_jobs=-1):
+     return np.array(res).reshape(len(energies), len(ratios))
+ 
+ 
+-def fig_map_with_overlay(params, g1, ratios, energies, state="py",
+-                         n_jobs=-1, save=None):
+-    from matplotlib.colors import Normalize
+-    Z = map_g2_energy(params, g1, ratios, energies, state, n_jobs)
+-    R, E = np.meshgrid(ratios, energies)
+-    # analytic dphi field for the conversion-loci contours
+-    DPHI = np.vectorize(lambda r, e: _dphi(params, g1, r * g1, e))(R, E)
+-
+-    fig, ax = plt.subplots(figsize=(3.375, 2.6), constrained_layout=True)
+-    cmap = plt.get_cmap("RdBu_r").copy(); cmap.set_bad("#DDDDDD")
+-    im = ax.pcolormesh(ratios, energies, Z, cmap=cmap,
+-                       norm=Normalize(-1, 1), shading="auto", rasterized=True)
+-    lo, hi = np.nanmin(DPHI), np.nanmax(DPHI)
+-    levels = [np.pi/2 + n*np.pi
+-              for n in range(int(np.floor((lo-np.pi/2)/np.pi)),
+-                             int(np.ceil((hi-np.pi/2)/np.pi))+1)]
+-    ax.contour(R, E, DPHI, levels=levels, colors="k", linewidths=0.35,
+-               alpha=0.5)
+-    ax.axvline(-1, color="k", lw=0.8, ls=(0, (4, 2)))
+-    ax.set_xlabel(r"$g_2/g_1$"); ax.set_ylabel(r"$E/t$")
+-    ax.set_title(rf"injected $|{ {'py':'p_y','+z':'{+}z'}[state] }\rangle$",
+-                 fontsize=8)
+-    cb = fig.colorbar(im, ax=ax, pad=0.02, ticks=[-1, 0, 1])
+-    cb.set_label(r"$\langle L_z\rangle_{\rm out}$")
+-    if save:
+-        fig.savefig(save, dpi=300); fig.savefig(save.replace(".png", ".pdf"))
+-    return fig, ax, Z
+-
+-
+ # ======================================================================
+ #  Stripe (conversion-locus) ratios for GENERAL lengths d1, d2
+ # ======================================================================
+@@ -333,7 +217,7 @@ def flanking_stripe_ratios(params, g1, d1=None, d2=None, E0=None):
+ #  Two-panel (g2/g1, E) maps, |py> and |+z|, styled + length-aware
+ # ======================================================================
+ def fig_maps_ratio_E(params, g1, r=None, energies=None, d1=None, d2=None,
+-                     engine="analytic", py_sign=+1, mask=True,
++                     engine="analytic", py_sign=-1, mask=True,
+                      n_jobs=-1, save=None):
+     """Transmitted <Lz> over (g2/g1, E) for |py> (top) and |+z> (bottom).
+ 
+@@ -342,9 +226,8 @@ def fig_maps_ratio_E(params, g1, r=None, energies=None, d1=None, d2=None,
+     conversion-loci contours and the two-channel mask are recomputed for
+     those lengths, so the stripes move correctly when d1 != d2.
+ 
+-    py_sign=+1 uses the exact-scattering sign (|py> -> +sin dphi), matching
+-    the Kwant readout in this module; set py_sign=-1 for the older -sin
+-    convention.  The dashed vertical marks g2/g1 = -1; when d1 != d2 the
++    py_sign=-1 gives <Lz> = -sin(dphi) for |py>, as in Eq. (7); it only
++    affects engine='analytic'.  The dashed vertical marks g2/g1 = -1; when d1 != d2 the
+     true zero-<Lz> locus is drawn as a solid black line instead.
+     """
+     t, eps = params["t"], params["eps"]
+diff --git a/scripts/length_scan_validation.py b/scripts/length_scan_validation.py
+index bc4cdf7..5ada90b 100644
+--- a/scripts/length_scan_validation.py
++++ b/scripts/length_scan_validation.py
+@@ -19,15 +19,14 @@ sit at d_n = (pi/2 + n pi)/Dk. Positions test the phase formula; any
+ amplitude reduction tests the equal-transmission assumption (appendix,
+ validity section) -- these are separable diagnostics.
+ 
+-Requires orbital_chain_1d.py and map_gE_chain1d.py.
++Requires the orbfilter package.
+ """
+ 
+ import numpy as np
+ import matplotlib.pyplot as plt
+ from joblib import Parallel, delayed
+ 
+-from orbfilter.chain_1d import OrbitalChain1D, STATES, Lz, chi_z
+-from map_gE_chain1d import transmitted_state
++from orbfilter.chain_1d import OrbitalChain1D, STATES, Lz, chi_z, transmitted_state
+ 
+ 
+ # ----------------------------------------------------------------------
+diff --git a/scripts/map_Lz_energy_theta.py b/scripts/map_Lz_energy_theta.py
+index 8e4bb43..0166c31 100644
+--- a/scripts/map_Lz_energy_theta.py
++++ b/scripts/map_Lz_energy_theta.py
+@@ -16,8 +16,8 @@ theta-independent VERTICAL lines:
+ - if at some (theta, E) *either* all py or all px channels are closed,
+   L_z^max = 0 identically (nothing for Lz to couple).
+ 
+-Assumes: Rotated2D class (corrected version), transmitted_Lz_envelope
+-from scan_Lz_theta_example.py (with the nuc = wf.shape[0]//norb fix).
++Requires the orbfilter package. Failed pixels are stored as NaN (not 0),
++so they cannot be mistaken for zero polarization.
+ """
+ 
+ import numpy as np
+@@ -26,7 +26,6 @@ import matplotlib.pyplot as plt
+ from joblib import Parallel, delayed
+ 
+ from orbfilter.rotated_2d import Rotated2D
+-from scan_Lz_theta_example import Lz, transmitted_Lz_envelope
+ 
+ mpl.rcParams.update({
+     "font.family": "STIXGeneral",
+@@ -70,10 +69,11 @@ def _one_pixel(params, theta, energy):
+     wire = Rotated2D(**dict(params, theta=theta))
+     wire.build()
+     try:
+-        return transmitted_Lz_envelope(wire, energy=energy)
++        return wire.transmitted_Lz_envelope(energy=energy)
+     except Exception:
+-        # e.g. no propagating modes at this energy -> no transmission
+-        return 0.0
++        # A closed lead already gives 0.0 inside transmitted_Lz_envelope;
++        # anything raised here is a real failure -> NaN, reported below.
++        return np.nan
+ 
+ 
+ def map_Lz_energy_theta(params, energies, thetas, n_jobs=-1, verbose=5):
+@@ -85,7 +85,12 @@ def map_Lz_energy_theta(params, energies, thetas, n_jobs=-1, verbose=5):
+     grid = [(th, en) for th in thetas for en in energies]
+     vals = Parallel(n_jobs=n_jobs, verbose=verbose)(
+         delayed(_one_pixel)(params, th, en) for th, en in grid)
+-    return np.array(vals).reshape(len(thetas), len(energies))
++    Lz_map = np.array(vals, dtype=float).reshape(len(thetas), len(energies))
++    n_bad = int(np.isnan(Lz_map).sum())
++    if n_bad:
++        print(f"WARNING: {n_bad} of {Lz_map.size} pixels failed (stored as NaN), "
++              f"W = {params['width']}")
++    return Lz_map
+ 
+ 
+ # =======================================================================
+@@ -97,7 +102,7 @@ def plot_Lz_map(energies, thetas, Lz_map, params,
+ 
+     pcm = ax.pcolormesh(energies, thetas / np.pi, Lz_map,
+                         cmap="magma_r", shading="auto",
+-                        vmin=0.0, vmax=max(Lz_map.max(), 1e-12))
++                        vmin=0.0, vmax=max(np.nanmax(Lz_map), 1e-12))
+     cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
+     cbar.set_label(r"$L_z^{\max}$", fontsize=17)
+     cbar.ax.tick_params(labelsize=16)
+@@ -134,7 +139,7 @@ def plot_Lz_phase_diagram(energies, thetas, Lz_map, params,
+ 
+     pcm = ax.pcolormesh(energies, thetas / np.pi, pd.astype(float),
+                         cmap="inferno", shading="auto",
+-                        vmin=0.0, vmax=max(Lz_map.max(), 1e-12))
++                        vmin=0.0, vmax=max(np.nanmax(Lz_map), 1e-12))
+     
+     cbar = fig.colorbar(pcm, ax=ax, pad=0.02)
+     cbar.set_label(r"$L_z^{\max}$", fontsize=15)
+diff --git a/scripts/map_gE_chain1d.py b/scripts/map_gE_chain1d.py
+index 53be8ec..e754f8c 100644
+--- a/scripts/map_gE_chain1d.py
++++ b/scripts/map_gE_chain1d.py
+@@ -19,85 +19,13 @@ For sign = -1 the ballistic prediction is Lz_out = 1 identically (equal
+ segments unwind each other); deviations from 1 map the interface
+ reflections in (g, E).
+ 
+-Requires: orbital_chain_1d.py in the same directory.
++Requires the orbfilter package.
+ """
+ 
+ import numpy as np
+ import matplotlib.pyplot as plt
+-from joblib import Parallel, delayed
+ 
+-from orbfilter.chain_1d import OrbitalChain1D, STATES, Lz, Q_ops, chi_z
+-
+-
+-# ----------------------------------------------------------------------
+-#  Transmitted orbital state from the S-matrix
+-# ----------------------------------------------------------------------
+-def transmitted_state(wire, phi_in, energy):
+-    """
+-    Returns (phi_out, T): orbital vector of the transmitted state in the
+-    right lead (unnormalized; |phi_out|^2 relates to transmitted flux)
+-    and the total transmission probability for this input.
+-    Returns (None, 0.0) if no propagating modes.
+-    """
+-    import kwant
+-    sm = kwant.smatrix(wire.syst, energy)
+-    t = sm.submatrix(1, 0)                    # (n_out_R, n_in_L)
+-    n_out, n_in = t.shape
+-    if n_out == 0 or n_in == 0:
+-        return None, 0.0
+-
+-    # incoming modes of lead 0: first n_in columns; outgoing of lead 1:
+-    # columns n_out: (same convention validated in the 2D envelope code)
+-    u_in = sm.lead_info[0].wave_functions[:wire.norb, :n_in]
+-    u_out = sm.lead_info[1].wave_functions[:wire.norb, n_out:]
+-
+-    phi_in = np.asarray(phi_in, complex)
+-    phi_in = phi_in / np.linalg.norm(phi_in)
+-    c_in, *_ = np.linalg.lstsq(u_in, phi_in, rcond=None)
+-    flux_in = np.sum(np.abs(c_in) ** 2)
+-
+-    c_out = t @ c_in
+-    T = float(np.sum(np.abs(c_out) ** 2) / flux_in)   # transmitted / incident flux
+-    phi_out = u_out @ c_out
+-    return phi_out, T
+-
+-
+-def pixel(params, g, energy, sign, phi_in):
+-    wire = OrbitalChain1D(g1=g, g2=sign * g, **params)
+-    wire.build()
+-    phi_out, T = transmitted_state(wire, phi_in, energy)
+-    if phi_out is None or np.linalg.norm(phi_out) < 1e-12:
+-        return np.nan, np.nan, T
+-    n2 = np.vdot(phi_out, phi_out).real
+-    lz = np.vdot(phi_out, Lz @ phi_out).real / n2
+-    qd = np.vdot(phi_out, Q_ops["Lx^2-Ly^2"] @ phi_out).real / n2
+-    return lz, qd, T
+-
+-
+-# ----------------------------------------------------------------------
+-#  Map
+-# ----------------------------------------------------------------------
+-def map_g_energy(params, gs, energies, sign=+1, state="+z",
+-                 n_jobs=-1, verbose=5):
+-    phi_in = STATES[state]
+-    grid = [(g, en) for en in energies for g in gs]
+-    res = Parallel(n_jobs=n_jobs, verbose=verbose)(
+-        delayed(pixel)(params, g, en, sign, phi_in) for g, en in grid)
+-    res = np.array(res).reshape(len(energies), len(gs), 3)
+-    return res[..., 0], res[..., 1], res[..., 2]   # Lz, Qdiag, T
+-
+-
+-def ballistic_Lz(params, gs, energies):
+-    """cos(Delta_phi_tot) for the homogeneous chain, NaN where evanescent."""
+-    t, eps = params["t"], params["eps"]
+-    d = params["d1"] + params["d2"]
+-    G, E = np.meshgrid(gs, energies)
+-    cp = (eps + G - E) / (2 * t)
+-    cm = (eps - G - E) / (2 * t)
+-    out = np.full_like(G, np.nan, dtype=float)
+-    ok = (np.abs(cp) < 1) & (np.abs(cm) < 1)
+-    out[ok] = np.cos((np.arccos(cm[ok]) - np.arccos(cp[ok])) * d)
+-    return out
++from orbfilter.chain_1d import chi_z, map_g_energy, ballistic_Lz
+ 
+ 
+ # ----------------------------------------------------------------------
+diff --git a/scripts/replot_Lz_widths.py b/scripts/replot_Lz_widths.py
+index 245f8b5..747e157 100644
+--- a/scripts/replot_Lz_widths.py
++++ b/scripts/replot_Lz_widths.py
+@@ -61,7 +61,7 @@ def replot_width(width, L_central=L_CENTRAL):
+         save_path=os.path.join(PLOT_DIR, f"Lz_map_w{width}.png"),
+     )
+     plt.close(fig)
+-    print(f"[W={width:2d}] re-plotted, max Lz = {Lz_map.max():.4f}")
++    print(f"[W={width:2d}] re-plotted, max Lz = {np.nanmax(Lz_map):.4f}")
+     return thetas, energies, Lz_map, params
+ 
+ 
+diff --git a/scripts/scan_Lz_theta_example.py b/scripts/scan_Lz_theta_example.py
+index 0d593f5..8f3ec71 100644
+--- a/scripts/scan_Lz_theta_example.py
++++ b/scripts/scan_Lz_theta_example.py
+@@ -13,73 +13,12 @@ Where the curves agree the local peak is representative of the asymptotic
+ precession; where local_max exceeds env_max the excess is an interface
+ transient (evanescent contributions absent from the propagating-mode sum).
+ 
+-Assumes the Rotated2D class with the corrected SK matrices, the
+-query_ball_point interface, and compute_operator_binned as previously
+-rewritten. Requires: numpy, matplotlib, kwant.
++Requires the orbfilter package.
+ """
+ 
+ import numpy as np
+ import matplotlib.pyplot as plt
+-import kwant
+-from orbfilter.rotated_2d import Rotated2D
+-
+-# --- the orbital operator, paper Eq. (2), basis {pz, py, px} -----------
+-Lz = np.array([[0, 0, 0],
+-               [0, 0, -1j],
+-               [0, 1j, 0]])
+-
+-
+-# =======================================================================
+-#  Analytic envelope from the S-matrix (closed form, no x-scan needed)
+-# =======================================================================
+-def transmitted_Lz_envelope(wire, energy=0.0, operator=Lz):
+-    """
+-    L_z^max = (2/N) * sum_p |rho_{yp,xp}|  for the unpolarized equal-flux
+-    mixture of incoming left-lead modes, where rho = t t^dagger is the
+-    transmitted coherence matrix and the sum runs over pairs of outgoing
+-    right-lead modes (n, m) coupled by the operator (py <-> px, same
+-    transverse channel p -- automatically selected by the matrix element).
+-
+-    Implementation note: rather than classifying modes by orbital/channel
+-    by hand, we use the operator matrix elements M_nm = <u_n|Lz|u_m>
+-    between outgoing modes. Pairs not coupled by Lz (different transverse
+-    channel, or involving pz) have M_nm = 0 by the orthogonality argument
+-    of the derivation, so the generic sum
+-
+-        L_env = (2/N) * sum_{n<m} |rho_mn| * |M_nm| / sqrt(N_nn N_mm)
+-
+-    reduces to the appendix formula without manual bookkeeping, and stays
+-    correct if the lead is ever modified (e.g. onsite disorder in tests).
+-    Returns 0.0 if the right lead carries no propagating modes.
+-    """
+-    sm = kwant.smatrix(wire.syst, energy)
+-    t = sm.submatrix(1, 0)                        # (n_out_R, n_in_L)
+-    n_out = t.shape[0]
+-    if n_out == 0:
+-        return 0.0
+-
+-    modes = sm.lead_info[1]
+-    wf = modes.wave_functions[:, n_out:]          # outgoing modes only
+-    nuc = wf.shape[0] // wire.norb
+-    u = wf.T.reshape(n_out, nuc, wire.norb)       # (n, sites_uc, norb)
+-
+-    rho = t @ t.conj().T                          # transmitted coherences
+-    M = np.einsum('nsi,ij,msj->nm', u.conj(), operator, u)
+-    G = np.einsum('nsi,msi->nm', u.conj(), u)     # mode overlaps (diag ~ norms)
+-
+-    N = np.real(np.sum(np.diag(rho) * np.diag(G)))
+-    if N <= 1e-14:
+-        return 0.0
+-
+-    # envelope: sum of |coherence * matrix element| over distinct pairs;
+-    # factor 2 because (n,m) and (m,n) are the conjugate halves of the
+-    # same sinusoid (cf. 2 Im[...] in the derivation)
+-    env = 0.0
+-    for n in range(n_out):
+-        for m in range(n + 1, n_out):
+-            env += 2.0 * np.abs(rho[m, n] * M[n, m])
+-    return env / N
+-
++from orbfilter.rotated_2d import Rotated2D, Lz
+ 
+ # =======================================================================
+ #  Local binned maximum in region III (as before, index-safe version)
+@@ -113,7 +52,7 @@ def scan_Lz_vs_theta(params, angles, energy=0.5, bin_coeff=1.0,
+         local_max[k] = local_Lz_max(wire, energy=energy,
+                                     bin_coeff=bin_coeff,
+                                     buffer_cells=buffer_cells)
+-        env_max[k] = transmitted_Lz_envelope(wire, energy=energy)
++        env_max[k] = wire.transmitted_Lz_envelope(energy=energy)
+ 
+         if verbose and (k % 10 == 0 or k == len(angles) - 1):
+             print(f"[{k+1:3d}/{len(angles)}] theta = {theta:.4f}  "
+@@ -181,6 +120,6 @@ if __name__ == "__main__":
+     #     operator=Lz, energy=energy, lead=0, summed_over_modes=True)
+     # plt.plot(bin_x, Otot[0], lw=0.8)
+     # plt.axvline(wire.a * (wire.L1 + wire.L2), color='k', ls='--', lw=0.8)
+-    # plt.axhline(transmitted_Lz_envelope(wire, energy), color='teal', ls=':')
+-    # plt.axhline(-transmitted_Lz_envelope(wire, energy), color='teal', ls=':')
++    # plt.axhline(wire.transmitted_Lz_envelope(energy), color='teal', ls=':')
++    # plt.axhline(-wire.transmitted_Lz_envelope(energy), color='teal', ls=':')
+     # plt.xlabel('x'); plt.ylabel(r'$\langle L_z\rangle(x)$'); plt.show()
+diff --git a/scripts/two_region_model.py b/scripts/two_region_model.py
+deleted file mode 100644
+index feef547..0000000
+--- a/scripts/two_region_model.py
++++ /dev/null
+@@ -1,250 +0,0 @@
+-import numpy as np
+-import matplotlib.pyplot as plt
+-import matplotlib.patches as mpatches
+-import matplotlib.patheffects as pe
+-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Arc
+-from matplotlib.gridspec import GridSpec
+-
+-# ── Style ──────────────────────────────────────────────────────────────────
+-plt.rcParams.update({
+-    "font.family": "serif",
+-    "font.serif": ["DejaVu Serif"],
+-    "text.usetex": False,
+-    "axes.spines.top": False,
+-    "axes.spines.right": False,
+-    "axes.spines.left": False,
+-    "axes.spines.bottom": False,
+-})
+-
+-DARK   = "#1a1a2e"
+-MID    = "#16213e"
+-LEAD   = "#0f3460"
+-ACCENT1= "#e94560"   # region 1 – warm red
+-ACCENT2= "#0f9b8e"   # region 2 – teal
+-LEAD_L = "#4a90d9"   # lead colour (light blue)
+-ARROW  = "#f5a623"   # arrow / electron colour
+-TEXT   = "#f0f0f0"
+-SUBTEXT= "#aaaaaa"
+-WHITE  = "#ffffff"
+-
+-fig = plt.figure(figsize=(14, 7), facecolor=DARK)
+-fig.patch.set_facecolor(DARK)
+-
+-ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+-ax.set_xlim(0, 14)
+-ax.set_ylim(0, 7)
+-ax.set_facecolor(DARK)
+-ax.axis("off")
+-
+-# ── Helper: draw a row of lattice sites ────────────────────────────────────
+-def draw_chain(ax, x_start, x_end, y, n_sites, color, zorder=3, alpha=1.0):
+-    xs = np.linspace(x_start, x_end, n_sites)
+-    # hopping lines
+-    for i in range(len(xs)-1):
+-        ax.plot([xs[i], xs[i+1]], [y, y],
+-                color=color, lw=1.8, alpha=alpha*0.6, zorder=zorder-1)
+-    # sites
+-    for x in xs:
+-        circle = plt.Circle((x, y), 0.13, color=color,
+-                             zorder=zorder, alpha=alpha)
+-        ax.add_patch(circle)
+-        circle2 = plt.Circle((x, y), 0.13, fill=False,
+-                              edgecolor=WHITE, lw=0.5,
+-                              zorder=zorder+1, alpha=alpha*0.5)
+-        ax.add_patch(circle2)
+-    return xs
+-
+-# ── Section labels background boxes ────────────────────────────────────────
+-def label_box(ax, x, y, text, color, fontsize=10, text_color=WHITE):
+-    bbox = dict(boxstyle="round,pad=0.4", facecolor=color,
+-                edgecolor="none", alpha=0.85)
+-    ax.text(x, y, text, ha="center", va="center",
+-            fontsize=fontsize, color=text_color,
+-            fontweight="bold", bbox=bbox, zorder=10)
+-
+-# ═══════════════════════════════════════════════════════════════════════════
+-# TOP HALF – schematic diagram
+-# ═══════════════════════════════════════════════════════════════════════════
+-y_chain = 4.8
+-x_lead_L_start = 0.4
+-x_lead_L_end   = 2.8
+-x_reg1_start   = 3.0
+-x_reg1_end     = 5.6
+-x_reg2_start   = 5.8
+-x_reg2_end     = 8.4
+-x_lead_R_start = 8.6
+-x_lead_R_end   = 11.0
+-
+-N_lead = 8
+-N_reg  = 9
+-
+-# background highlight bands for regions
+-for xb, xe, col in [(x_reg1_start-0.15, x_reg1_end+0.15, ACCENT1),
+-                    (x_reg2_start-0.15, x_reg2_end+0.15, ACCENT2)]:
+-    rect = FancyBboxPatch((xb, y_chain-0.55), xe-xb, 1.1,
+-                           boxstyle="round,pad=0.08",
+-                           facecolor=col, edgecolor="none",
+-                           alpha=0.18, zorder=1)
+-    ax.add_patch(rect)
+-
+-# chains
+-draw_chain(ax, x_lead_L_start, x_lead_L_end, y_chain, N_lead,  LEAD_L)
+-xs1 = draw_chain(ax, x_reg1_start,   x_reg1_end,   y_chain, N_reg,   ACCENT1)
+-xs2 = draw_chain(ax, x_reg2_start,   x_reg2_end,   y_chain, N_reg,   ACCENT2)
+-draw_chain(ax, x_lead_R_start, x_lead_R_end, y_chain, N_lead,  LEAD_L)
+-
+-# connecting hops between sections
+-for (x0, x1) in [(x_lead_L_end, x_reg1_start),
+-                 (x_reg1_end,   x_reg2_start),
+-                 (x_reg2_end,   x_lead_R_start)]:
+-    ax.plot([x0, x1], [y_chain, y_chain],
+-            color=WHITE, lw=1.5, ls="--", alpha=0.35, zorder=2)
+-
+-# ── orbital mixing squiggles above region sites ────────────────────────────
+-def draw_mixing_arc(ax, x, y, color, scale=0.3):
+-    """Small arc above site to suggest orbital mixing."""
+-    theta = np.linspace(0, np.pi, 40)
+-    rx, ry = scale*0.7, scale*0.5
+-    ax.plot(x + rx*np.cos(theta), y + 0.18 + ry*np.sin(theta),
+-            color=color, lw=1.2, alpha=0.7, zorder=5)
+-
+-for x in xs1[::2]:
+-    draw_mixing_arc(ax, x, y_chain, ACCENT1)
+-for x in xs2[::2]:
+-    draw_mixing_arc(ax, x, y_chain, ACCENT2)
+-
+-# ── Section labels ─────────────────────────────────────────────────────────
+-label_box(ax, (x_lead_L_start+x_lead_L_end)/2, y_chain-1.1,
+-          "Lead (L)", LEAD_L, fontsize=9)
+-label_box(ax, (x_reg1_start+x_reg1_end)/2,     y_chain-1.1,
+-          "Region 1\n$g_1,\\, \\chi_{xy}$", ACCENT1, fontsize=9)
+-label_box(ax, (x_reg2_start+x_reg2_end)/2,     y_chain-1.1,
+-          "Region 2\n$g_2,\\, \\chi_{xy}$", ACCENT2, fontsize=9)
+-label_box(ax, (x_lead_R_start+x_lead_R_end)/2, y_chain-1.1,
+-          "Lead (R)", LEAD_L, fontsize=9)
+-
+-# dashed vertical separators
+-for xv in [x_reg1_start-0.15, x_reg1_end+0.15,
+-           x_reg2_start-0.15, x_reg2_end+0.15]:
+-    ax.plot([xv, xv], [y_chain-0.6, y_chain+0.6],
+-            color=WHITE, lw=0.8, ls=":", alpha=0.3, zorder=2)
+-
+-# ── Electron arrow (incoming) ──────────────────────────────────────────────
+-ax.annotate("", xy=(x_lead_L_end-0.3, y_chain+0.55),
+-            xytext=(x_lead_L_start+0.1, y_chain+0.55),
+-            arrowprops=dict(arrowstyle="-|>", color=ARROW,
+-                            lw=2.0, mutation_scale=14),
+-            zorder=8)
+-ax.text((x_lead_L_start+x_lead_L_end)/2, y_chain+0.82,
+-        "electron\n$L_z=0$ (quadrupole)",
+-        ha="center", va="bottom", fontsize=8.5,
+-        color=ARROW, fontstyle="italic")
+-
+-# ── Orbital state labels along chain ──────────────────────────────────────
+-state_y = y_chain + 1.35
+-for xpos, label, col in [
+-    ((x_lead_L_start+x_lead_L_end)/2,   "$L_z = 0$\nquadrupole",  LEAD_L),
+-    ((x_reg1_start+x_reg1_end)/2,        "$L_z = \\pm1$\ndipole",   ACCENT1),
+-    ((x_reg2_start+x_reg2_end)/2,        "$L_z = 0$ or $\\pm1$?\nfiltering?", ACCENT2),
+-    ((x_lead_R_start+x_lead_R_end)/2,    "$L_z = 0$ or $\\pm1$\noutcome",     LEAD_L),
+-]:
+-    ax.text(xpos, state_y, label, ha="center", va="bottom",
+-            fontsize=8, color=col, alpha=0.92,
+-            bbox=dict(facecolor=DARK, edgecolor=col,
+-                      alpha=0.5, boxstyle="round,pad=0.3", lw=0.8))
+-
+-# transition arrows between state labels
+-for x0, x1 in [(x_lead_L_end, x_reg1_start),
+-               (x_reg1_end,   x_reg2_start),
+-               (x_reg2_end,   x_lead_R_start)]:
+-    ax.annotate("", xy=(x1+0.1, state_y+0.3),
+-                xytext=(x0-0.1, state_y+0.3),
+-                arrowprops=dict(arrowstyle="-|>", color=WHITE,
+-                                lw=1.0, mutation_scale=10, alpha=0.4),
+-                zorder=6)
+-
+-# ── Title ──────────────────────────────────────────────────────────────────
+-ax.text(7.0, 6.75,
+-        "Two-Region Tight-Binding Model for Orbital Filtering",
+-        ha="center", va="top", fontsize=13, color=WHITE,
+-        fontweight="bold")
+-
+-# ═══════════════════════════════════════════════════════════════════════════
+-# BOTTOM HALF – orbital state cartoons (px, py, dxy)
+-# ═══════════════════════════════════════════════════════════════════════════
+-y_orb = 1.55
+-orb_xs = [2.2, 5.2, 8.2, 11.2]
+-orb_labels = ["$p_x$\n(dipole)", "$p_y$\n(dipole)",
+-              "$d_{xy}$\n(quadrupole)", "$L_z=0$ mix\n(quadrupole)"]
+-orb_colors = [ACCENT1, ACCENT1, ACCENT2, LEAD_L]
+-
+-def draw_px(ax, cx, cy, r=0.55, color=ACCENT1):
+-    theta = np.linspace(0, np.pi, 80)
+-    ax.fill(cx + r*np.cos(theta)*0.55, cy + r*np.sin(theta),
+-            color=color, alpha=0.7)
+-    ax.fill(cx - r*np.cos(theta)*0.55, cy - r*np.sin(theta),
+-            color=color, alpha=0.35)
+-
+-def draw_py(ax, cx, cy, r=0.55, color=ACCENT1):
+-    theta = np.linspace(0, np.pi, 80)
+-    ax.fill(cx + r*np.sin(theta), cy + r*np.cos(theta)*0.55,
+-            color=color, alpha=0.7)
+-    ax.fill(cx - r*np.sin(theta), cy - r*np.cos(theta)*0.55,
+-            color=color, alpha=0.35)
+-
+-def draw_dxy(ax, cx, cy, r=0.55, color=ACCENT2):
+-    for sign in [1, -1]:
+-        theta = np.linspace(0, np.pi/2, 60)
+-        xs_ = sign * r * np.cos(theta) * np.sin(theta) * 2
+-        ys_ = sign * r * (np.cos(theta)**2 - np.sin(theta)**2)
+-        ax.fill(cx + xs_, cy + ys_, color=color, alpha=0.7)
+-        ax.fill(cx - xs_, cy - ys_, color=color, alpha=0.35)
+-
+-def draw_quadrupole_mix(ax, cx, cy, r=0.55, color=LEAD_L):
+-    # superposition circle with inner rings
+-    for rad, a in [(r, 0.25), (r*0.65, 0.35), (r*0.3, 0.5)]:
+-        circle = plt.Circle((cx, cy), rad, fill=False,
+-                             edgecolor=color, lw=1.5, alpha=a)
+-        ax.add_patch(circle)
+-    # cross
+-    for dx, dy in [(r*0.8, 0), (0, r*0.8), (-r*0.8, 0), (0, -r*0.8)]:
+-        ax.plot([cx, cx+dx], [cy, cy+dy],
+-                color=color, lw=1.2, alpha=0.6)
+-
+-drawers = [draw_px, draw_py, draw_dxy, draw_quadrupole_mix]
+-for i, (cx, lbl, col, drawer) in enumerate(
+-        zip(orb_xs, orb_labels, orb_colors, drawers)):
+-    drawer(ax, cx, y_orb, color=col)
+-    ax.text(cx, y_orb - 0.85, lbl, ha="center", va="top",
+-            fontsize=8.5, color=col)
+-
+-# mixing arrows between orbital cartoons
+-for i in range(len(orb_xs)-1):
+-    mid_x = (orb_xs[i] + orb_xs[i+1]) / 2
+-    ax.annotate("", xy=(orb_xs[i+1]-0.7, y_orb),
+-                xytext=(orb_xs[i]+0.7,   y_orb),
+-                arrowprops=dict(arrowstyle="<->", color=WHITE,
+-                                lw=1.2, mutation_scale=12, alpha=0.4))
+-
+-ax.text(7.0, 0.18,
+-        "Orbital states involved in the quadrupole $\\leftrightarrow$ dipole conversion",
+-        ha="center", va="bottom", fontsize=9,
+-        color=SUBTEXT, fontstyle="italic")
+-
+-# dividing line between top and bottom
+-ax.plot([0.3, 13.7], [2.85, 2.85],
+-        color=WHITE, lw=0.6, alpha=0.15, ls="--")
+-
+-# ── Chi_xy label ───────────────────────────────────────────────────────────
+-ax.text(11.6, y_chain+0.1,
+-        "$\\chi_{xy}$ =\norbital\nmixing\nmatrix",
+-        ha="left", va="center", fontsize=8,
+-        color=WHITE, alpha=0.55,
+-        bbox=dict(facecolor=DARK, edgecolor=WHITE,
+-                  alpha=0.2, boxstyle="round,pad=0.3", lw=0.5))
+-
+-plt.savefig("/mnt/user-data/outputs/two_region_model_figure.pdf",
+-            dpi=300, bbox_inches="tight", facecolor=DARK)
+-plt.savefig("/mnt/user-data/outputs/two_region_model_figure.png",
+-            dpi=300, bbox_inches="tight", facecolor=DARK)
+-print("Saved.")
